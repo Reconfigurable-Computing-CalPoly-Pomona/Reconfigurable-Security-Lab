@@ -40,20 +40,29 @@ module squeez #(parameter CWIDTH = 320,
                 logic selgo, Ggo;
                 logic [REMAINWIDTH-1:0] remainReg;
                 logic [RWIDTH-1:0] rReg;
-                logic [CWIDTH-1:0] coSReg;
+                logic [RWIDTH-1:0] roReg;
+                logic [CWIDTH-1:0] roSReg;
+                logic [RWIDTH-1:0] roSSReg;
                 logic [CWIDTH-1:0] coGReg;
                 logic [RWIDTH-1:0] len;
                 logic [CWIDTH-1:0] bReg;
                  typedef enum {START, REMAINCHECK, BCONCATINATE, REMAIN2WIDTH, SELWAIT, REMAININGZERO, GWAIT, END} state_type;
-                 state_type curr_state, next_state;
+                 state_type curr_state, next_state, prev_state;
     
 
                 //FF for State:
                 always_ff @(posedge clk, posedge reset)
                     if (reset)
+                    begin
                         curr_state <= START;
+                        prev_state <= START;
+                    end
                     else
+                    begin
+                        prev_state <= curr_state;
                         curr_state <= next_state;
+                    end
+
 
                 //Case for FSM
                 always_comb begin
@@ -85,8 +94,15 @@ module squeez #(parameter CWIDTH = 320,
                                 end
                         BCONCATINATE:   
                             begin
-                            // space for B <- B||r  help //7
-                            
+                            if (prev_state == SELWAIT)
+                            begin
+                            bReg = {roSSREG[lenReg,0],bReg[CWIDTH-1:lenReg]}
+                            end
+                            else
+                            begin
+                                bReg = {roSSREG,bReg[CWIDTH-1:remainReg]}
+                            end 
+
                             remainReg = remainReg-len; //8
                             next_state = REMAININGZERO; 
                             end
@@ -104,7 +120,7 @@ module squeez #(parameter CWIDTH = 320,
                             begin
                             if (selgo==1)
                             begin
-                                cReg = coSReg;
+                                roSSREG <= roSReg
                                 selgo = 0'b1; 
                                 next_state = BCONCATINATE;
                             end
@@ -130,7 +146,7 @@ module squeez #(parameter CWIDTH = 320,
             end
 G #(.CWIDTH(CWIDTH), .RWIDTH(RWIDTH), .ROUND_COUNT(ROUND_COUNT)) g (
         .c(cReg),
-        .rout(rReg),
+        .rout(roReg),
         .cout(coReg),
         .clk(clk),
         .reset(reset||!Ggo),
@@ -140,7 +156,7 @@ G #(.CWIDTH(CWIDTH), .RWIDTH(RWIDTH), .ROUND_COUNT(ROUND_COUNT)) g (
   select #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
         .inputVal(cReg),
         .index(len),
-        .out(coReg),
+        .out(roSReg),
         .reset(reset)
     );
 endmodule
