@@ -86,7 +86,7 @@ module squeez #(parameter CWIDTH = 320,
                         BCONCATINATE:   
                             begin
                             // space for B <- B||r  help //7
-
+                            
                             remainReg = remainReg-len; //8
                             next_state = REMAININGZERO; 
                             end
@@ -105,6 +105,7 @@ module squeez #(parameter CWIDTH = 320,
                             if (selgo==1)
                             begin
                                 cReg = coSReg;
+                                selgo = 0'b1; 
                                 next_state = BCONCATINATE;
                             end
                             else
