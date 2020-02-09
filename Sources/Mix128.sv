@@ -201,10 +201,10 @@ module Mix128 #(parameter CWIDTH = 127, parameter XWORDS32 = 2, parameter DS_WID
 //        end
 //    end
     
-    select #(.INPUT_WIDTH(256), .OUT_WIDTH(DWIDTH)) select1 (
+    selec_t #(.INPUT_WIDTH(256), .OUT_WIDTH(DWIDTH)) select1 (
         .inputVal(iReg),
         .index(j),
-        .out(selOut),
+        .out1(selOut),
         .reset(reset)
     );
     

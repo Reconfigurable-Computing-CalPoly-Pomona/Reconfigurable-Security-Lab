@@ -51,18 +51,18 @@ endfunction
 */
 
 
-module select #(parameter INPUT_WIDTH = 8, parameter OUT_WIDTH = 4) (
+module selec_t #(parameter INPUT_WIDTH = 8, parameter OUT_WIDTH = 4) (
     input logic [INPUT_WIDTH-1:0] inputVal,
     input logic [$clog2(INPUT_WIDTH/OUT_WIDTH) - 1: 0] index,
-    output logic [OUT_WIDTH-1:0] out,
+    output logic [OUT_WIDTH-1:0] out1,
     input logic reset
     );
     
     always_comb
     if (reset)
-        out = 0;
+        out1 = 0;
     else
-        out = inputVal[OUT_WIDTH*index +: OUT_WIDTH];    
+        out1 = inputVal[OUT_WIDTH*index +: OUT_WIDTH];    
        
 
 endmodule
