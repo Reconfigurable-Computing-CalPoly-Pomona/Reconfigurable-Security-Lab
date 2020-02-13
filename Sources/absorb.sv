@@ -184,7 +184,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     );
     
     padding  #(.IWIDTH(IWIDTH), .BWIDTH(BWIDTH)) pad (
-        .block(blocks[(B-1)*BWIDTH +: BWIDTH]),
+        .blockIn(blocks[(B-1)*BWIDTH +: BWIDTH]),
         .blockOut(lastBlock),
         .padded(padded)
     );

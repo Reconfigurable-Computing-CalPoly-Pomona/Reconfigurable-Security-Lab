@@ -38,12 +38,13 @@ Generic( iWidth : integer := 128;
          rWidth : integer := 128 );
   Port ( clk : in STD_LOGIC;
          start: in STD_LOGIC;
+         rst : in STD_LOGIC;
          K : in STD_LOGIC_VECTOR(191 downto 0);
-         S : in STD_LOGIC_VECTOR(7 downto 0);
-         A : in STD_LOGIC_VECTOR(7 downto 0);
-         NONCE:in STD_LOGIC_VECTOR(7 downto 0);
-         P : in STD_LOGIC_VECTOR(7 downto 0);
-         C : out STD_LOGIC_VECTOR(7 downto 0);
+         S : in STD_LOGIC_VECTOR(127 downto 0);
+         A : in STD_LOGIC_VECTOR(127 downto 0);
+         NONCE:in STD_LOGIC_VECTOR(128 downto 0);
+         P : in STD_LOGIC_VECTOR(127 downto 0);
+         C : out STD_LOGIC_VECTOR(127 downto 0);
          TAG : out STD_LOGIC_VECTOR(7 downto 0);
          done : out STD_LOGIC);
 end Encrypt;
@@ -118,14 +119,11 @@ component F
 end component;
 
 component padding is
-    Generic ( g_block_in_size:Integer:= 32;
-              g_block_out_size:Integer:= 64;
-              g_i_width:Integer:= 64); 
-    Port ( 
-               i_block_in: in std_logic_vector(g_block_in_size-1 downto 0);
-               o_block_out: out std_logic_vector(g_block_out_size-1 downto 0);
-               i_clk      : in std_logic;
-               o_padded: out std_logic
+    Generic (IWIDTH : integer := 64; BWIDTH : integer := 32);
+    Port (
+        blockIn : in std_logic_vector(BWIDTH-1 downto 0);
+        blockOut: out std_logic_vector(IWIDTH-1 downto 0);
+        padded : out std_logic 
     );
 end component;
 
@@ -159,19 +157,20 @@ signal Fi : STD_LOGIC_VECTOR(7 downto 0);
 --end
 signal fin : STD_LOGIC;
 signal tempSel: STD_LOGIC_VECTOR(7 downto 0);
-signal PadIn : STD_LOGIC_VECTOR(7 downto 0);
-signal padded, lastblock : STD_LOGIC_VECTOR(7 downto 0);
+signal PadIn : STD_LOGIC_VECTOR(127 downto 0);
+signal PadOut : STD_LOGIC_VECTOR(127 downto 0);
+signal padded : STD_LOGIC;
 signal DSlilm : STD_LOGIC_VECTOR(1 downto 0);
-type stateMachine is (s0, s1, s2, s3, s4, s5, s6, s7, s8, sf);
+type stateMachine is (BeginEnc, StaticData1, StaticData2, NonceStep, Associated, CipherText1, CipherText2, CipherPostFor, Padd, TagFinal);
 type selector is ('0', '1', '2', '3', '4');
-signal State : stateMachine := s0;
+signal State : stateMachine := TagFinal;
 signal SEL : selector;
 
 begin
 process (clk, start)
 variable ints,inta,intm, i : integer;
 variable finalize : STD_LOGIC;
-variable doneTemp: STD_LOGIC := '0';
+variable doneTemp: STD_LOGIC := '1';
 begin
 if (rising_edge(clk)) then
         ints := S'LENGTH/iWidth;
@@ -179,7 +178,7 @@ if (rising_edge(clk)) then
         intm := P'LENGTH/iWidth;
         finalize := '0';
         case state is
-            when s0 =>
+            when BeginEnc =>
                 if (doneTemp = '1') then
                     rstK <= '1';
                     rstA <= '1';
@@ -194,18 +193,19 @@ if (rising_edge(clk)) then
                     i := 0;
                     SEL <= '2';
                     if (doneK = '1') then
-                         state <= s1;
+                         state <= StaticData1;
                          statec <= newc;
                          x <= newx;
                          rstK <= '1';
                     end if;
                  end if;
-            when s1 =>
+            when StaticData1 =>
                     rstA <= '0';
+                    absBlocks <= S;
                     doneS1 <= doneAbs;
                     if (ints < integer(0)) then
                         if(doneS1 = '1') then
-                            state <= s2;
+                            state <= StaticData2;
                             statec <= newc;
                             x <= newx;
                             r <= newr;
@@ -213,44 +213,47 @@ if (rising_edge(clk)) then
                             rstA <= '1';
                         end if;
                     else
-                        state <= s3; -- state past S block
+                        state <= NonceStep;
                     end if;
-            when s2 =>
+            when StaticData2 =>
                 rstS <= '0';
                 doneS2 <= doneSqe;
                 if (doneS2 = '1') then
-                    state <= s3;
+                    state <= NonceStep;
                     statec <= newc;
                     SEL <= '0';
                     rstS <= '1';
                 end if;
-            when s3 =>
+            when NonceStep =>
                 rstA <= '0';
                 if((inta + intm) = 0) then
                     finalize := '1';
                 else
                     finalize := '0';
                 end if;
+                absBlocks <= NONCE;
                 doneN <= doneAbs;
                 if (doneN = '1') then
-                    state <= s4;
+                    state <= Associated;
                     statec <= newc;
                     r <= newr;
                     x <= newx;
                     rstA <= '1';
                 end if;
-            when s4 =>
+            when Associated =>
                 rstA <= '0';
                 if(intm = 0) then
                     finalize := '1';
                 else
                     finalize := '0';
                 end if;
+                absBlocks <= A;
+                doneN <= Doneabs;
                 if (doneN = '1') then
                     if (intm > 0) then
-                        state <= s5;
+                        state <= CipherText1;--to cipher
                     else
-                        state <= sf;
+                        state <= TagFinal;--to tag
                     end if;
                     statec <= newc;
                     r <= newr;
@@ -258,46 +261,58 @@ if (rising_edge(clk)) then
                     SEL <= '1';
                     rstA <= '1';
                 end if;
-            when s5 =>
+            when CipherText1 =>
                 rstF <= '0';
                 SEL <= '4';
                 if( i < (intm - 1)) then
-                    state <= s7;
+                    state <= CipherPostFor;
                 else
-                    C(i) <= P(i) xor r(0);
-                    Fi <= P(i) & P(i);
+                    C((i+1)*rWidth downto i*rWidth) <= P((i+1)*rWidth downto i*rWidth) xor r;
+                    Fi <= P((i+1)*rWidth downto i*rWidth);
                     if(doneF = '1') then
                         rstF <= '1';
-                        state <= s6;
+                        state <= CipherText2;
                     end if;
                 end if;
-            when s6 =>
+            when CipherText2 =>
                 statec <= newC;
                 x <= newx;
                 r <= newr;
-                state <= s5; 
-            when s7 =>
-                tempSel(i) <= P(i) xor r(0);
-                PadIn <= P;
+                state <= CipherText1; 
+            when CipherPostFor =>
+                if (C'Length mod rwidth = 0) then --match dim even cut
+                    C((i+1)*rWidth downto i*rWidth) <= P((i+1)*rWidth downto i*rwidth) xor r;
+                else
+                    C(i*rWidth + C'Length mod rWidth downto i*rWidth) <= P(i*rWidth + C'Length mod rWidth downto i*rWidth) xor r(i*rWidth + C'Length mod rWidth downto 0);
+                end if;
+                PadIn <= P((i+1)*rWidth downto i*rwidth);
                 finalize:= '1';
-                state <= s8;
-            when s8 =>
+                state <= Padd;
+            when Padd =>
+                rstF <= '0';
                 DSlilm <= padded & finalize;
                 SEL <= '4';
                 if (doneF = '1')then
+                    rstF <= '1';
                     statec <= newc;
                     x <= newx;
                     r <= newr;
-                    state <= sf;
+                    state <= TagFinal;
                 end if;
-            when sf =>
-                SEL <= '3';
-                rstS <= '0';
-                doneTag <= doneSqe;
-                if (doneTAG = '1')then
-                    TAG <= newc;
-                    rstS <= '1';
-                    doneTemp := '1'; -- after last action
+            when TagFinal =>
+                if(doneTemp = '0') then
+                    SEL <= '3';
+                    rstS <= '0';
+                    doneTag <= doneSqe;
+                    if (doneTAG = '1')then
+                        TAG <= newc;
+                        rstS <= '1';
+                        doneTemp := '1'; -- after last action
+                    end if;
+                else
+                    if(rst = '1') then
+                        state <= BeginEnc;
+                    end if;
                 end if;
             when others => finalize := '0';
         end case;
@@ -404,5 +419,15 @@ port map(
     xout => Fx,
     rout => Fr,
     done => doneF
+);
+
+pading: padding Generic map ( 
+    IWIDTH => 128,
+    BWIDTH => 128
+)
+port map ( 
+   blockIn => PadIn,
+   blockOut => PadOut,
+   padded => padded
 );
 end Behavioral;
