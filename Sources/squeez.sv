@@ -40,7 +40,7 @@ module squeez #(parameter CWIDTH = 320,
                 logic selgo, Ggo;
                 logic [REMAINWIDTH-1:0] remainReg;
                 logic [RWIDTH-1:0] rReg;
-                logic [RWIDTH-1:0] roReg;
+                logic [RWIDTH-1:0] roGReg;
                 logic [CWIDTH-1:0] roSReg;
                 logic [RWIDTH-1:0] roSSReg;
                 logic [CWIDTH-1:0] coGReg;
@@ -100,7 +100,7 @@ module squeez #(parameter CWIDTH = 320,
                             end
                             else
                             begin
-                                bReg = {roSSREG,bReg[CWIDTH-1:remainReg]}
+                                bReg = {roSSREG,bReg    [CWIDTH-1:remainReg]}
                             end 
 
                             remainReg = remainReg-len; //8
@@ -131,6 +131,7 @@ module squeez #(parameter CWIDTH = 320,
                             begin
                             if (Gdone ==1) //10
                                 next_state = REMAINCHECK;
+                                rReg = roGReg; 
                                 cReg = coGReg;
                             else
                                 next_state = GWAIT;
@@ -146,7 +147,7 @@ module squeez #(parameter CWIDTH = 320,
             end
 G #(.CWIDTH(CWIDTH), .RWIDTH(RWIDTH), .ROUND_COUNT(ROUND_COUNT)) g (
         .c(cReg),
-        .rout(roReg),
+        .rout(roGReg),
         .cout(coReg),
         .clk(clk),
         .reset(reset||!Ggo),
