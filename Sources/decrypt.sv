@@ -5,7 +5,7 @@
 // 
 // Create Date: 11/12/2019 04:05:58 PM
 // Design Name: 
-// Module Name: squeez
+// Module Name: decrypt
 // Project Name: 
 // Target Devices: 
 // Tool Versions: 
