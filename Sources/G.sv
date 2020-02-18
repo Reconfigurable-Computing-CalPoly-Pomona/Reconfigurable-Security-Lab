@@ -29,10 +29,10 @@ module G #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter ROUND_COUNT 
     output logic done
     );
     
-    logic [CWIDTH-1:0] cReg, gasOut;
+    logic [CWIDTH-1:0] cReg, gasOut, gas_cin;
     logic [RWIDTH-1:0] rReg, acc_out;
     logic gas_done, increment, gasReset, acc_done, acc_en;
-    integer j;
+    logic [ROUND_COUNT-1:0] j;
     
     typedef enum {INITIALIZE, START, WAITGAS, WAITACCUMULATE, RESTART_GAS, DONE} state_type;
     state_type curr_state, next_state;
@@ -61,11 +61,13 @@ module G #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter ROUND_COUNT 
         cReg = cReg;
         rReg = rReg;
         rout = 0;
+        gas_cin = gas_cin;
         
         case (curr_state)
             INITIALIZE: begin
                 rReg = 0;
-                cReg = c;
+                cReg = 0;
+                gas_cin = c;
                 gasReset = 1'b0;
                 acc_en = 1'b0;
                 next_state = WAITGAS;
@@ -121,9 +123,9 @@ module G #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter ROUND_COUNT 
                 gasReset = 1'b0;
                 acc_en = 1'b0;
                 next_state = DONE;
-                done = 1'b1;
                 cout = cReg;
                 rout = rReg;
+                done = 1'b1;
             end    
         
         endcase
@@ -144,7 +146,7 @@ module G #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter ROUND_COUNT 
     
     Gascon_Core_Round #(.CWIDTH(CWIDTH), .ROUND_COUNT(ROUND_COUNT)) gascon (
         .clk(clk),
-        .c(cReg),
+        .c(gas_cin),
         .cout(gasOut),
         .round(j),
         .reset(reset | gasReset),

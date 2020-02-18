@@ -20,12 +20,12 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module F #(parameter CWIDTH = 320, parameter XWORDS32 = 9, parameter DS_WIDTH = 128,
-            parameter RWIDTH = 32, parameter ROUND_COUNT = 10) (
+module F #(parameter CWIDTH = 320, parameter XWORDS32 = 9, parameter DS_WIDTH = 4,
+            parameter RWIDTH = 32, parameter ROUND_COUNT = 10, parameter IWIDTH = 128) (
     input logic clk, reset,
     input logic [CWIDTH-1:0] c,
     input logic [XWORDS32*32-1:0] x,
-    input logic [127:0] i,
+    input logic [IWIDTH-1:0] i,
     input logic [DS_WIDTH-1:0] ds,
     input logic [ROUND_COUNT-1:0] rounds,
     output logic [CWIDTH-1:0] cout,

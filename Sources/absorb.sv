@@ -21,7 +21,7 @@
 
 
 module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH = 64,
-                parameter BWIDTH = 32, parameter NUMBLOCKS = 4) 
+                parameter BWIDTH = 32, parameter NUMBLOCKS = 12) 
     (
         input logic [CWIDTH-1:0] c,
         input logic [RWIDTH-1:0] r,
@@ -38,7 +38,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     localparam IWIDTH = 128;
     localparam B = (BWIDTH*NUMBLOCKS)/IWIDTH;
     
-    typedef enum {INITIALIZE, START, WAITF, DONEFOR, FORF, DONE} state_type;
+    typedef enum {INITIALIZE, START, WAITF, RESTART, DONEFOR, FORF, DONE} state_type;
     state_type curr_state, next_state;
     
     logic fdone, func_en, count_valid, increment, f_reset, padded;
@@ -51,14 +51,14 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     
     
     assign func_en = (B>0) ? 1:0;
-    assign count_valid = (i < B-1) ? 1:0;
+    assign count_valid = ((i+1) < B-1) ? 1:0;
     
 
     
     always_ff @(posedge clk, posedge reset) begin
         if (reset) i <= 0;
         else if (increment) i <= i + 1;
-        else if (count_valid) i <= i + 1;
+        //else if (count_valid) i <= i + 1;
         else i <= i;
     end
     
@@ -69,7 +69,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     
     always_comb begin
         f_ds = 0;
-        increment = 1'b0;
+//        increment = 1'b0;
         done = 1'b0;
         cReg = cReg;
         rReg = rReg;
@@ -84,6 +84,8 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
         
         case (curr_state)
             INITIALIZE: begin
+                increment = 1'b0;
+                done = 1'b0;
                 f_cin = c;
                 f_xin = x;
                 f_rin = r;
@@ -97,35 +99,54 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
                 next_state = START;
             end
             
+            RESTART: begin
+                f_reset = 1'b1;
+                increment = 1'b1;
+                if (count_valid) next_state = START;
+                else next_state = DONEFOR;  
+//                increment = 1'b0;
+            end
+            
             START: begin
                 f_reset = 1'b1;
                 f_cin = f_cin;
                 f_dataIn = blocks[i*IWIDTH +: IWIDTH];
-                f_reset = 1'b0;
+//                f_reset = 1'b0;
                 next_state = WAITF;
+                increment = 1'b0;
             end
             
             WAITF: begin
                 if (fdone) begin
+                    increment = 1'b0;
                     cReg = f_cout;
                     xReg = f_xout;
-                    f_reset = 1'b0;
-                    increment = 1'b1;
-                    if (count_valid) next_state = START;
-                    else next_state = DONEFOR;   
+                    rReg = f_rout;
+                    f_cin = cReg;
+//                    f_reset = 1'b1;
+                    if (count_valid) begin
+                        increment = 1'b1;
+                        next_state = START;
+                    end
+                    else begin
+                        next_state = DONEFOR;  
+                    end
                 end
                 else begin
                     cReg = cReg;
                     f_dataIn = f_dataIn;
                     f_reset = 1'b0;
+                    next_state = WAITF;
+                    increment = 1'b0;
                 end
             end
             
             DONEFOR: begin
                 f_reset = 1'b0;
-                cReg = f_cout;
-                xReg = f_xout;
-                rReg = f_rout;
+                increment = 1'b0;
+                cReg = cReg;
+                xReg = xReg;
+                rReg = rReg;
                 f_cin = cReg;
                 f_xin = xReg;
                 f_rin = rReg;
@@ -137,9 +158,11 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
             
             FORF: begin
                 f_reset = 1'b0;
+                increment = 1'b0;
                 if (fdone) begin
                     cReg = f_cout;
                     xReg = f_xout;
+                    rReg = f_rout;
                     next_state = DONE;
                     cout = cReg;
                     xout = xReg;
@@ -148,6 +171,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
                 else begin
                     cReg = cReg;
                     xReg = xReg;
+                    rReg = rReg;
                     next_state = FORF;
                 end
                 
@@ -155,6 +179,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
             
             DONE: begin
                 f_reset = 1'b0;
+                done =  1'b1;
                 cout = cout;
                 xout = xout;
                 next_state = DONE;
@@ -169,7 +194,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     
     
     
-    F #(.XWORDS32(XWIDTH/32), .DS_WIDTH(2), .ROUND_COUNT(128)) f (
+    F #(.XWORDS32(XWIDTH/32), .DS_WIDTH(2), .ROUND_COUNT(128),.RWIDTH(RWIDTH)) f (
         .clk(clk),
         .reset(reset | f_reset),
         .c(f_cin),
@@ -183,8 +208,8 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
         .done(fdone)
     );
     
-    padding  #(.IWIDTH(IWIDTH), .BWIDTH(BWIDTH)) pad (
-        .block(blocks[(B-1)*BWIDTH +: BWIDTH]),
+    padding2  #(.IWIDTH(IWIDTH), .BWIDTH(BWIDTH)) pad (
+        .blockIn(blocks[(B-1)*BWIDTH +: BWIDTH]),
         .blockOut(lastBlock),
         .padded(padded)
     );

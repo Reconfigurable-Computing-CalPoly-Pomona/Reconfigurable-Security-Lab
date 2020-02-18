@@ -33,21 +33,20 @@ module squeez #(parameter CWIDTH = 320,
                 output logic [CWIDTH-1:0] Bdata, //output data
                 input  logic [RWIDTH-1:0] r, // state I think
                 input  logic [REMAINWIDTH-1:0] remaining,
-                input  logic [ROUND_COUNT-1:0] rounds
-                output logic squeezDone; 
+                input  logic [ROUND_COUNT-1:0] rounds,
+                output logic squeezDone
                 );
-                logic [CWIDTH-1:0] cReg;
+                logic [CWIDTH-1:0] cReg, g_cin;
                 logic selgo, Ggo;
                 logic [REMAINWIDTH-1:0] remainReg;
-                logic [RWIDTH-1:0] rReg;
+                logic [RWIDTH-1:0] rReg, sel_input;
                 logic [RWIDTH-1:0] roReg;
                 logic [CWIDTH-1:0] roSReg;
-                logic [RWIDTH-1:0] roSSReg;
-                logic [CWIDTH-1:0] coGReg;
+                logic [CWIDTH-1:0] roSSReg;
                 logic [RWIDTH-1:0] len;
                 logic [CWIDTH-1:0] bReg;
-                 typedef enum {START, REMAINCHECK, BCONCATINATE, REMAIN2WIDTH, SELWAIT, REMAININGZERO, GWAIT, END} state_type;
-                 state_type curr_state, next_state, prev_state;
+                typedef enum {START, REMAINCHECK, BCONCATINATE, REMAIN2WIDTH, SELWAIT, REMAININGZERO, GWAIT, DONE} state_type;
+                state_type curr_state, next_state, prev_state;
     
 
                 //FF for State:
@@ -66,97 +65,98 @@ module squeez #(parameter CWIDTH = 320,
 
                 //Case for FSM
                 always_comb begin
+                    g_cin = g_cin;
+                    Ggo = Ggo;
+                    squeezDone = squeezDone;
+                    
                 case (curr_state)
                          START:
                             begin
-                                len <= RWIDTH; //1
+                                len = RWIDTH; //1
                                 remainReg=remaining; 
                                 next_state = REMAINCHECK;
-                                 
+                                bReg = 0;
+                                roSSReg = r;    //take in initial r value 
+                                cReg = c; //take in C;
+                                Ggo = 1'b0;
+                                squeezDone = 1'b0;
+                                
                             end
                         REMAINCHECK: 
                             begin
-                            if(remaining > 0)//2
+                            Ggo = 1'b0;
+                            if(remainReg > 0)//2
                                 next_state = REMAIN2WIDTH;
                             else
-                                next_state = END;
+                                next_state = DONE;
                             end
                         REMAIN2WIDTH: 
                             begin
-                            if (remaining < RWIDTH)//3
+                            if (remainReg < RWIDTH)//3
                                 begin
-                                len <= remaining;//4
-                                selgo <= 1; 
-                                next_state = SELWAIT;
+                                    len = remaining;//4
                                 end
-                            else
                                 next_state = BCONCATINATE; 
-                                end
-                        BCONCATINATE:   
-                            begin
-                            if (prev_state == SELWAIT)
-                            begin
-                            bReg = {roSSREG[lenReg,0],bReg[CWIDTH-1:lenReg]}
                             end
-                            else
-                            begin
-                                bReg = {roSSREG,bReg[CWIDTH-1:remainReg]}
-                            end 
-
-                            remainReg = remainReg-len; //8
+                        BCONCATINATE: begin
+                            bReg = bReg | (roSSReg << (CWIDTH-remainReg));
+                            remainReg = remainReg-len; 
                             next_state = REMAININGZERO; 
-                            end
+                        end
                         REMAININGZERO:  
+                        begin
+                            if (remainReg > 0)//9
                             begin
-                            if (remaining > 0)//9
-                            begin
+                                g_cin = cReg;
                                 Ggo = 1'b1;
                                 next_state = GWAIT;
                             end
                             else
                                 next_state = REMAINCHECK;
-                            end
-                        SELWAIT:    
-                            begin
-                            if (selgo==1)
-                            begin
-                                roSSREG <= roSReg
-                                selgo = 0'b1; 
-                                next_state = BCONCATINATE;
-                            end
-                            else
-                                selgo = 1'b1;
-                            end
+                        end
+//                        SELWAIT:    
+//                            begin
+//                            if (selgo==1)
+//                            begin
+//                                roSSReg <= roSReg;
+//                                selgo = 1'b1; 
+//                                next_state = BCONCATINATE;
+//                            end
+//                            else
+//                                selgo = 1'b1;
+//                            end
                         GWAIT:
                             begin
-                            if (Gdone ==1) //10
-                                next_state = REMAINCHECK;
-                                cReg = coGReg;
-                            else
-                                next_state = GWAIT;
+                                if (Gdone == 1) begin //10 
+                                    next_state = REMAINCHECK;
+                                    cReg = coReg;
+                                    roSSReg = roReg;
+                                end
+                                else next_state = GWAIT;  
                             end
-                        END:
+                        DONE:
                             begin
-                            Bdata <= bReg;
-                            squeezDone <= 1'b1;
+                            Bdata = bReg;
+                            squeezDone = 1'b1;
                             end
                 endcase
 
 
             end
-G #(.CWIDTH(CWIDTH), .RWIDTH(RWIDTH), .ROUND_COUNT(ROUND_COUNT)) g (
-        .c(cReg),
+    G #(.CWIDTH(CWIDTH), .RWIDTH(RWIDTH), .ROUND_COUNT(ROUND_COUNT)) g (
+        .c(g_cin),
         .rout(roReg),
         .cout(coReg),
         .clk(clk),
-        .reset(reset||!Ggo),
+        .reset(reset|(~Ggo)),
         .done(Gdone),
         .rounds(rounds)
     );
-  select #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
-        .inputVal(cReg),
-        .index(len),
-        .out(roSReg),
-        .reset(reset)
-    );
+    
+//    select #(.INPUT_WIDTH(RWIDTH), .OUT_WIDTH(CWIDTH)) select1 (
+//        .inputVal(sel_input),
+//        .index(0),
+//        .out(roSReg),
+//        .reset(reset | (~selgo))
+//    );
 endmodule
