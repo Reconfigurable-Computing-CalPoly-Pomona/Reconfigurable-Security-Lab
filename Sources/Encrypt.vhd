@@ -39,7 +39,7 @@ Generic( iWidth : integer := 128;
   Port ( clk : in STD_LOGIC;
          start: in STD_LOGIC;
          rst : in STD_LOGIC;
-         K : in STD_LOGIC_VECTOR(191 downto 0);
+         K : in STD_LOGIC_VECTOR(447 downto 0);
          S : in STD_LOGIC_VECTOR(127 downto 0);
          A : in STD_LOGIC_VECTOR(127 downto 0);
          NONCE:in STD_LOGIC_VECTOR(127 downto 0);
@@ -49,10 +49,10 @@ Generic( iWidth : integer := 128;
          done : out STD_LOGIC);
 end Encrypt;
 
-architecture Behavioral of Encrypt is
+architecture Behavioral of encrypt is
 --components
 component ksneq32 is
-    Generic(KWIDTHMAX : integer  := 192; CWIDTH: integer  := 128; XWIDTH: integer := 64);
+    Generic(MINWIDTH_K: integer := 128; KWIDTHMAX : integer  := 448; CWIDTH: integer  := 128; XWIDTH: integer := 64);
     Port (
         k: in STD_logic_vector(KWIDTHMAX-1 downto 0) ;
         kWidth : in std_logic_vector(1 downto 0) ;
@@ -96,7 +96,8 @@ component squeez
             r : in std_logic_vector(RWIDTH-1 downto 0); -- state I think
             remaining : in std_logic_vector(REMAINWIDTH-1 downto 0);
             rounds : in std_logic_vector(ROUND_COUNT-1 downto 0);
-            squeezDone : out std_logic 
+            squeezDone : out std_logic; 
+            big: in std_logic
     );  
 end component;
 
@@ -154,6 +155,7 @@ signal rstK, rstA, rstS, rstF : STD_LOGIC;
 signal absBlocks : STD_LOGIC_VECTOR(127 downto 0);
 signal remainS : STD_LOGIC_VECTOR(19 downto 0);
 signal Fi : STD_LOGIC_VECTOR(127 downto 0);
+signal big: STD_LOGIC := '0';
 --end
 signal fin : STD_LOGIC;
 signal tempSel: STD_LOGIC_VECTOR(7 downto 0);
@@ -221,6 +223,7 @@ if (rising_edge(clk)) then
                 rstA <= '1';
                 Sel <= '3';
                 RemainS <= conv_std_logic_vector(cWidth64*64,RemainS'Length);
+                big <= '1';
                 doneS2 <= doneSqe;
                 if (doneS2 = '1') then
                     state <= NonceStep;
@@ -308,6 +311,7 @@ if (rising_edge(clk)) then
                     x <= newx;
                     r <= newr;
                     state <= TagFinal;
+                    big <= '0';
                 end if;
             when TagFinal =>
                 if(doneTemp = '0') then
@@ -321,6 +325,10 @@ if (rising_edge(clk)) then
                         doneTemp := '1'; -- after last action
                     end if;
                 else
+                    rstK <= '1';
+                    rstA <= '1';
+                    rstS <= '1';
+                    rstF <= '1';
                     if(rst = '1') then
                         state <= BeginEnc;
                     end if;
@@ -355,13 +363,14 @@ SetXCR: process (SEL,clk) begin
 end process SetXCR;
 
 KS: ksneq32 generic map(
-    KWIDTHMAX => 192,
+    MINWIDTH_K => 128,
+    KWIDTHMAX => 448,
     CWIDTH => cWidth64*64,
     XWIDTH => xWidth32*32
 )
 port map(
     k => K,
-    kWidth => "11",
+    kWidth => "00",
     clk => clk,
     reset => rstK, 
     cout => KSc,
@@ -408,7 +417,8 @@ port map(
     r => r, -- state I think
     remaining => remainS,
     rounds => "0000000111",
-    squeezDone => doneSqe 
+    squeezDone => doneSqe,
+    big => big
 );
 
 encF : F generic map(

@@ -20,7 +20,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module ksneq32 #(parameter KWIDTHMAX = 192, parameter CWIDTH = 128, parameter XWIDTH = 64) (
+module ksneq32 #(parameter MINWIDTH_K = 128, parameter KWIDTHMAX = 192, parameter CWIDTH = 128, parameter XWIDTH = 64) (
     input logic [KWIDTHMAX-1:0] k,
     input logic [1:0] kWidth,
     input logic clk,reset,
@@ -29,7 +29,6 @@ module ksneq32 #(parameter KWIDTHMAX = 192, parameter CWIDTH = 128, parameter XW
     output logic done
 );
 
-    localparam MINWIDTH_K = 64;
     localparam XWORDS = XWIDTH/32;
     localparam KWORDS = MINWIDTH_K/32;
     localparam FASTWIDTH = MINWIDTH_K + XWIDTH;

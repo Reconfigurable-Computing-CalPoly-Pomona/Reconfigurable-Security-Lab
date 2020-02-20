@@ -27,7 +27,7 @@ module squeez #(parameter CWIDTH = 320,
                 parameter REMAINWIDTH = 20,
                 parameter ROUND_COUNT = 10)
                 (
-                input  logic clk, reset, 
+                input  logic clk, reset, big,
                 output logic seldone, Gdone,
                 input  logic [CWIDTH-1:0] c, // capacity
                 output logic [CWIDTH-1:0] Bdata, //output data
@@ -36,10 +36,10 @@ module squeez #(parameter CWIDTH = 320,
                 input  logic [ROUND_COUNT-1:0] rounds,
                 output logic squeezDone
                 );
-                logic [CWIDTH-1:0] cReg, g_cin;
-                logic selgo, Ggo;
+                logic [CWIDTH-1:0] cReg, g_cin, coReg;
+                logic Ggo;
                 logic [REMAINWIDTH-1:0] remainReg;
-                logic [RWIDTH-1:0] rReg, sel_input;
+                logic [RWIDTH-1:0] rReg;
                 logic [RWIDTH-1:0] roReg;
                 logic [CWIDTH-1:0] roSReg;
                 logic [CWIDTH-1:0] roSSReg;
@@ -68,13 +68,20 @@ module squeez #(parameter CWIDTH = 320,
                     g_cin = g_cin;
                     Ggo = Ggo;
                     squeezDone = squeezDone;
+                    cReg = cReg;
+                    Bdata = Bdata;
                     
                 case (curr_state)
                          START:
                             begin
+                                if (!big && !reset) begin
+                                    bReg = r[0];
+                                    next_state = DONE;
+                                end 
                                 len = RWIDTH; //1
                                 remainReg=remaining; 
-                                next_state = REMAINCHECK;
+                                if (reset) next_state = START;
+                                else next_state = REMAINCHECK;
                                 bReg = 0;
                                 roSSReg = r;    //take in initial r value 
                                 cReg = c; //take in C;
@@ -84,7 +91,7 @@ module squeez #(parameter CWIDTH = 320,
                             end
                         REMAINCHECK: 
                             begin
-                            Ggo = 1'b0;
+//                            Ggo = 1'b0;
                             if(remainReg > 0)//2
                                 next_state = REMAIN2WIDTH;
                             else
@@ -94,7 +101,7 @@ module squeez #(parameter CWIDTH = 320,
                             begin
                             if (remainReg < RWIDTH)//3
                                 begin
-                                    len = remaining;//4
+                                    len = remainReg;//4
                                 end
                                 next_state = BCONCATINATE; 
                             end
@@ -107,8 +114,8 @@ module squeez #(parameter CWIDTH = 320,
                         begin
                             if (remainReg > 0)//9
                             begin
+                                Ggo = 1'b0;
                                 g_cin = cReg;
-                                Ggo = 1'b1;
                                 next_state = GWAIT;
                             end
                             else
@@ -127,6 +134,7 @@ module squeez #(parameter CWIDTH = 320,
 //                            end
                         GWAIT:
                             begin
+                                Ggo = 1'b1;
                                 if (Gdone == 1) begin //10 
                                     next_state = REMAINCHECK;
                                     cReg = coReg;

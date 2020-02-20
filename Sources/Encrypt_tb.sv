@@ -24,7 +24,7 @@ module Encrypt_tb();
     
 //    localparam iW
     logic clk, start, rst, TAG, done;
-    logic [191:0] K;
+    logic [447:0] K;
     logic [127:0] S, A, NONCE, P, C;
     
     Encrypt sogcon(
@@ -56,11 +56,11 @@ module Encrypt_tb();
     end
     
     initial begin
-        K = 192'h68656c6c6f206d79206e616d6520697320736f67636f6e21;
+        K = 128'h75686577667569686875666f656969;
         S = 128'h726f6265727420697320636f6f6c2021;
-        NONCE = 128'h646f6e277420726561642074686973;
-        A = 128'h646f6e277420726561642074686973;
-        P = 128'h6e2774206465637279707420746873;
+        NONCE = 128'h64646f6e277420726561642074686973;
+        A = 128'h64646f6e277420726561642074686973;
+        P = 128'h646e2774206465637279707420746873;
         wait(done);
     end
 endmodule
