@@ -28,12 +28,13 @@ use IEEE.STD_LOGIC_ARITH.ALL;
 
 use ieee.numeric_std.all;
 
+
 -- Uncomment the following library declaration if instantiating
 -- any Xilinx leaf cells in this code.
 --library UNISIM;
 --use UNISIM.VComponents.all;
 
-entity Encrypt is
+entity Decrypt is
 Generic( iWidth : integer := 128;
          cWidth64 : integer := 5;
          xWidth32 : integer := 4;
@@ -45,13 +46,14 @@ Generic( iWidth : integer := 128;
          S : in STD_LOGIC_VECTOR(127 downto 0);
          A : in STD_LOGIC_VECTOR(127 downto 0);
          NONCE:in STD_LOGIC_VECTOR(127 downto 0);
-         P : in STD_LOGIC_VECTOR(127 downto 0);
-         C : out STD_LOGIC_VECTOR(127 downto 0);
-         TAG : out STD_LOGIC_VECTOR(0 downto 0);
+         P : out STD_LOGIC_VECTOR(127 downto 0);
+         C : in STD_LOGIC_VECTOR(127 downto 0);
+         TAG : in STD_LOGIC_VECTOR(0 downto 0);
+         failure : out STD_LOGIC;
          done : out STD_LOGIC);
-end Encrypt;
+end Decrypt;
 
-architecture Behavioral of encrypt is
+architecture Behavioral of Decrypt is
 --components
 component ksneq32 is
     Generic(MINWIDTH_K: integer := 128; KWIDTHMAX : integer  := 448; CWIDTH: integer  := 128; XWIDTH: integer := 64);
@@ -82,7 +84,7 @@ component absorb is
         cout : out std_logic_vector(CWIDTH-1 downto 0);
         rout : out std_logic_vector(RWIDTH-1 downto 0);
         xout : out std_logic_vector(XWIDTH-1 downto 0);
-        done : out std_logic
+        done : out std_logic 
     );
 end component;
 
@@ -92,6 +94,7 @@ component squeez
     Port(
             clk : in std_logic;
             reset: in std_logic; 
+            big : in std_logic;
             seldone : out std_logic;
             Gdone : out  std_logic;
             c : in std_logic_vector(CWIDTH-1 downto 0); -- capacity
@@ -99,8 +102,7 @@ component squeez
             r : in std_logic_vector(RWIDTH-1 downto 0); -- state I think
             remaining : in std_logic_vector(REMAINWIDTH-1 downto 0);
             rounds : in std_logic_vector(ROUND_COUNT-1 downto 0);
-            squeezDone : out std_logic; 
-            big: in std_logic
+            squeezDone : out std_logic 
     );  
 end component;
 
@@ -158,14 +160,16 @@ signal rstK, rstA, rstS, rstF : STD_LOGIC;
 signal absBlocks : STD_LOGIC_VECTOR(127 downto 0);
 signal remainS : STD_LOGIC_VECTOR(19 downto 0);
 signal Fi : STD_LOGIC_VECTOR(127 downto 0);
-signal big: STD_LOGIC := '0';
+signal ptemp : std_logic_vector(P'LENGTH - 1 downto 0);
+signal firstDone, big : std_logic := '0';
+signal newTAG : std_logic_vector(0 downto 0);
+signal rounds : STD_LOGIC_VECTOR(3 downto 0);
 --end
 signal fin : STD_LOGIC;
 signal tempSel: STD_LOGIC_VECTOR(7 downto 0);
 signal PadIn : STD_LOGIC_VECTOR(127 downto 0);
 signal PadOut : STD_LOGIC_VECTOR(127 downto 0);
 signal padded : STD_LOGIC;
-signal rounds : STD_LOGIC_VECTOR(3 downto 0);
 signal DSlilm : STD_LOGIC_VECTOR(3 downto 0);
 type stateMachine is (BeginEnc, StaticData1, StaticData2, NonceStep, Associated, CipherText1, CipherText2, CipherPostFor, Padd, TagFinal);
 type selector is ('0', '1', '2', '3', '4');
@@ -195,7 +199,7 @@ if (rising_edge(clk)) then
                     rstK <= '0';
                     DSlilm <= "0000";
                 end if;
-                 if (start = '1' or doneTemp = '0') then
+                 if (start = '1'or doneTemp = '0') then
                     doneTemp := '0';
                     i := 0;
                     SEL <= '2';
@@ -286,8 +290,8 @@ if (rising_edge(clk)) then
             when CipherText1 =>
                 SEL <= '4';
                 if( i < (intm - 1)) then    
-                    C((i+1)*rWidth-1 downto i*rWidth) <= P((i+1)*rWidth-1 downto i*rWidth) xor r;
-                    Fi <= P((i+1)*rWidth-1 downto i*rWidth);
+                    ptemp((i+1)*rWidth-1 downto i*rWidth) <= C((i+1)*rWidth-1 downto i*rWidth) xor r;
+                    Fi <= ptemp((i+1)*rWidth-1 downto i*rWidth);
                     if(doneF = '1') then
 --                        rstF <= '1';
                         state <= CipherText2;
@@ -305,11 +309,11 @@ if (rising_edge(clk)) then
                 state <= CipherText1; 
             when CipherPostFor =>
                 if (C'Length mod rwidth = 0) then --match dim even cut
-                    C((i+1)*rWidth-1 downto i*rWidth) <= P((i+1)*rWidth-1 downto i*rwidth) xor r;
+                    ptemp((i+1)*rWidth-1 downto i*rWidth) <= C((i+1)*rWidth-1 downto i*rwidth) xor r;
                 else
-                    C(i*rWidth - 1 + C'Length mod rWidth downto i*rWidth) <= P(i*rWidth - 1 + C'Length mod rWidth downto i*rWidth) xor r(i*rWidth + C'Length mod rWidth downto 0);
+                    ptemp(i*rWidth - 1 + C'Length mod rWidth downto i*rWidth) <= C(i*rWidth - 1 + C'Length mod rWidth downto i*rWidth) xor r(i*rWidth + C'Length mod rWidth downto 0);
                 end if;
-                PadIn <= P((i+1)*rWidth -1 downto i*rwidth);
+                PadIn <= ptemp((i+1)*rWidth -1 downto i*rwidth);
                 finalize:= '1';
                 state <= Padd;
             when Padd =>
@@ -317,7 +321,7 @@ if (rising_edge(clk)) then
 --                {domain,finalize,padded}
                 DSlilm <= dsm & finalize & padded;
                 SEL <= '4';
-                Fi <= P((i+1)*rWidth-1 downto i*rWidth);
+                Fi <= ptemp((i+1)*rWidth-1 downto i*rWidth);
                 if (doneF = '1')then
                     rstS <= '1';
                     statec <= newc;
@@ -325,6 +329,7 @@ if (rising_edge(clk)) then
                     r <= newr;
                     state <= TagFinal;
                     big <= '0';
+                    rstS <= '0';
                 end if;
             when TagFinal =>
                 if(doneTemp = '0') then
@@ -333,17 +338,29 @@ if (rising_edge(clk)) then
                     rstS <= '0';
                     doneTag <= doneSqe;
                     if (doneTAG = '1')then
-                        TAG <= newc(0 downto 0);
+                        newTAG <= newc(0 downto 0);
+                        firstDone <= '1';
                         rstS <= '1';
                         doneTemp := '1'; -- after last action
                     end if;
                 else
-                    rstK <= '1';
-                    rstA <= '1';
-                    rstS <= '1';
-                    rstF <= '1';
-                    if(rst = '1') then
-                        state <= BeginEnc;
+                    if(firstDone = '1') then
+                        firstDone <= '0';
+                        if(newTAG = TAG) then
+                            P <= ptemp;
+                            failure <= '0';
+                        else
+                            failure <= '1';
+                        end if;
+                    else
+                        firstDone <= '0';
+                        rstK <= '1';
+                        rstA <= '1';
+                        rstS <= '1';
+                        rstF <= '1';
+                        if(rst = '1') then
+                            state <= BeginEnc;
+                        end if;
                     end if;
                 end if;
             when others => finalize := '0';
@@ -440,7 +457,7 @@ encF : F generic map(
     XWORDS32 => xWidth32,
     DS_WIDTH => 4,
     RWIDTH => rWidth,
-    ROUND_COUNT => 4
+    ROUND_COUNT => 10
 )
 port map(
     clk => clk, 
@@ -449,7 +466,7 @@ port map(
     x => x,
     i => Fi,
     ds => DSlilm,
-    rounds => "0111",
+    rounds => "0000000111",
     cout => Fc,
     xout => Fx,
     rout => Fr,
