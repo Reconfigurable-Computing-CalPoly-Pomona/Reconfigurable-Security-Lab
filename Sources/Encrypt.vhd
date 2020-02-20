@@ -437,7 +437,7 @@ port map(
 
 encF : F generic map(
     CWIDTH => cWidth64*64,
-    XWORDS32 => xWidth32,
+    XWORDS32 =>xWidth32,
     DS_WIDTH => 4,
     RWIDTH => rWidth,
     ROUND_COUNT => 4
