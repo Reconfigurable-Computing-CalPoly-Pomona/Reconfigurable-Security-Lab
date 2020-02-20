@@ -26,6 +26,8 @@ use IEEE.math_real.all;
 -- arithmetic functions with Signed or Unsigned values
 use IEEE.STD_LOGIC_ARITH.ALL;
 
+use ieee.numeric_std.all;
+
 -- Uncomment the following library declaration if instantiating
 -- any Xilinx leaf cells in this code.
 --library UNISIM;
@@ -72,6 +74,7 @@ component absorb is
         r : in std_logic_vector(RWIDTH-1 downto 0);
         x : in std_logic_vector(XWIDTH-1 downto 0);
         blocks : in std_logic_vector((BWIDTH*NUMBLOCKS)-1 downto 0);
+        rounds : in std_logic_vector(3 downto 0);
         finalize : in std_logic;
         clk: in std_logic; 
         reset: in std_logic;
@@ -79,7 +82,7 @@ component absorb is
         cout : out std_logic_vector(CWIDTH-1 downto 0);
         rout : out std_logic_vector(RWIDTH-1 downto 0);
         xout : out std_logic_vector(XWIDTH-1 downto 0);
-        done : out std_logic 
+        done : out std_logic
     );
 end component;
 
@@ -162,7 +165,8 @@ signal tempSel: STD_LOGIC_VECTOR(7 downto 0);
 signal PadIn : STD_LOGIC_VECTOR(127 downto 0);
 signal PadOut : STD_LOGIC_VECTOR(127 downto 0);
 signal padded : STD_LOGIC;
-signal DSlilm : STD_LOGIC_VECTOR(1 downto 0);
+signal rounds : STD_LOGIC_VECTOR(3 downto 0);
+signal DSlilm : STD_LOGIC_VECTOR(3 downto 0);
 type stateMachine is (BeginEnc, StaticData1, StaticData2, NonceStep, Associated, CipherText1, CipherText2, CipherPostFor, Padd, TagFinal);
 type selector is ('0', '1', '2', '3', '4');
 signal State : stateMachine := TagFinal;
@@ -182,13 +186,14 @@ if (rising_edge(clk)) then
         case state is
             when BeginEnc =>
                 if (doneTemp = '1') then
+                    rounds <= std_logic_vector(to_unsigned(7,rounds'length));
                     rstK <= '1';
                     rstA <= '1';
                     rstS <= '1';
                     rstF <= '1';
                 else
                     rstK <= '0';
-                    DSlilm <= "00";
+                    DSlilm <= "0000";
                 end if;
                  if (start = '1') then
                     doneTemp := '0';
@@ -206,6 +211,7 @@ if (rising_edge(clk)) then
                     absBlocks <= S;
                     doneS1 <= doneAbs;
                     SEL <= '0';
+                    Domsep <= dss;
                     if (ints > integer(0)) then
                         rstA <= '0';
                         if(doneS1 = '1') then
@@ -225,12 +231,15 @@ if (rising_edge(clk)) then
                 RemainS <= conv_std_logic_vector(cWidth64*64,RemainS'Length);
                 big <= '1';
                 doneS2 <= doneSqe;
+                
                 if (doneS2 = '1') then
                     state <= NonceStep;
                     statec <= newc;
                     SEL <= '0';
                 end if;
             when NonceStep =>
+                rounds <= std_logic_vector(to_unsigned(11,rounds'length));
+                Domsep <= dsd;
                 Sel <= '0';
                 rstS <= '1';
                 
@@ -252,6 +261,8 @@ if (rising_edge(clk)) then
                     rstA <= '0';
                 end if;
             when Associated =>
+                rounds <= std_logic_vector(to_unsigned(7,rounds'length));
+                Domsep <= dsa;
                 rstA <= '0';
                 if(intm = 0) then
                     finalize := '1';
@@ -286,6 +297,7 @@ if (rising_edge(clk)) then
                 else
                     state <= CipherPostFor;
                 end if;
+
             when CipherText2 =>
                 statec <= newC;
                 x <= newx;
@@ -302,7 +314,8 @@ if (rising_edge(clk)) then
                 state <= Padd;
             when Padd =>
                 rstF <= '0';
-                DSlilm <= padded & finalize;
+--                {domain,finalize,padded}
+                DSlilm <= dsm & finalize & padded;
                 SEL <= '4';
                 Fi <= P((i+1)*rWidth-1 downto i*rWidth);
                 if (doneF = '1')then
@@ -397,7 +410,8 @@ port map(
     cout => absc,
     rout => absr,
     xout => absx,
-    done => doneAbs
+    done => doneAbs,
+    rounds => rounds
 );
 
 Sqeez: squeez generic map(
@@ -424,9 +438,9 @@ port map(
 encF : F generic map(
     CWIDTH => cWidth64*64,
     XWORDS32 => xWidth32,
-    DS_WIDTH => 2,
+    DS_WIDTH => 4,
     RWIDTH => rWidth,
-    ROUND_COUNT => 10
+    ROUND_COUNT => 4
 )
 port map(
     clk => clk, 
@@ -435,7 +449,7 @@ port map(
     x => x,
     i => Fi,
     ds => DSlilm,
-    rounds => "0000000111",
+    rounds => "0111",
     cout => Fc,
     xout => Fx,
     rout => Fr,

@@ -29,6 +29,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
         input logic [(BWIDTH*NUMBLOCKS)-1:0] blocks,
         input logic finalize, clk, reset,
         input logic [1:0] domain,
+        input logic [3:0] rounds,
         output logic [CWIDTH-1:0] cout,
         output logic [RWIDTH-1:0] rout,
         output logic [XWIDTH-1:0] xout,
@@ -42,6 +43,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     state_type curr_state, next_state;
     
     logic fdone, func_en, count_valid, increment, f_reset, padded;
+    logic oneBlock;
     logic [3:0] f_ds;
     logic [IWIDTH-1:0] f_dataIn, lastBlock;
     logic [CWIDTH-1:0] cReg, f_cout, f_cin;
@@ -52,9 +54,8 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     
     assign func_en = (B>0) ? 1:0;
     assign count_valid = ((i+1) < B-1) ? 1:0;
-    
-
-    
+  
+  
     always_ff @(posedge clk, posedge reset) begin
         if (reset) i <= 0;
         else if (increment) i <= i + 1;
@@ -68,7 +69,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     end
     
     always_comb begin
-        f_ds = 0;
+        f_ds = f_ds;
 //        increment = 1'b0;
         done = 1'b0;
         cReg = cReg;
@@ -92,6 +93,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
                 cReg = 0;
                 xReg = 0;
                 rReg = 0;
+                f_ds = 0;
                 f_reset = 1'b1;
                 cout = 0;
                 xout = 0;
@@ -108,12 +110,16 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
             end
             
             START: begin
-                f_reset = 1'b1;
-                f_cin = f_cin;
-                f_dataIn = blocks[i*IWIDTH +: IWIDTH];
-//                f_reset = 1'b0;
-                next_state = WAITF;
-                increment = 1'b0;
+                if (B == 1)  next_state = DONEFOR;
+                else begin
+                    f_reset = 1'b1;
+                    f_ds = 0;
+                    f_cin = f_cin;
+                    f_dataIn = blocks[i*IWIDTH +: IWIDTH];
+    //                f_reset = 1'b0;
+                    next_state = WAITF;
+                    increment = 1'b0;
+                end
             end
             
             WAITF: begin
@@ -144,12 +150,19 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
             DONEFOR: begin
                 f_reset = 1'b0;
                 increment = 1'b0;
-                cReg = cReg;
-                xReg = xReg;
-                rReg = rReg;
-                f_cin = cReg;
-                f_xin = xReg;
-                f_rin = rReg;
+                if (B == 1) begin
+                    f_cin = c;
+                    f_xin = x;
+                    f_rin = r;
+                end
+                else begin
+                    cReg = cReg;
+                    xReg = xReg;
+                    rReg = rReg;
+                    f_cin = cReg;
+                    f_xin = xReg;
+                    f_rin = rReg;
+                end
                 f_ds = {domain,finalize,padded};
                 f_dataIn = lastBlock;
                 f_reset = 1'b1;
@@ -182,6 +195,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
                 done =  1'b1;
                 cout = cout;
                 xout = xout;
+                rout = rout;
                 next_state = DONE;
             end
    
@@ -194,7 +208,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
     
     
     
-    F #(.XWORDS32(XWIDTH/32), .DS_WIDTH(2), .ROUND_COUNT(128),.RWIDTH(RWIDTH)) f (
+    F #(.XWORDS32(XWIDTH/32), .DS_WIDTH(4), .ROUND_COUNT(4),.RWIDTH(RWIDTH)) f (
         .clk(clk),
         .reset(reset | f_reset),
         .c(f_cin),
@@ -203,7 +217,7 @@ module absorb #(parameter CWIDTH = 320, parameter RWIDTH = 32, parameter XWIDTH 
         .rout(f_rout),
         .cout(f_cout),
         .i(f_dataIn),
-        .rounds(7), //how are number of rounds calculated again? design parameter?
+        .rounds(rounds), //how are number of rounds calculated again? design parameter?
         .ds(f_ds),
         .done(fdone)
     );
