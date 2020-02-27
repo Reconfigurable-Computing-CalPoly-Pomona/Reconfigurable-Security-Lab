@@ -164,6 +164,7 @@ signal ptemp : std_logic_vector(P'LENGTH - 1 downto 0);
 signal firstDone, big : std_logic := '0';
 signal newTAG : std_logic_vector(0 downto 0);
 signal rounds : STD_LOGIC_VECTOR(3 downto 0);
+signal setTag : STD_LOGIC := '1';
 --end
 signal fin : STD_LOGIC;
 signal tempSel: STD_LOGIC_VECTOR(7 downto 0);
@@ -180,7 +181,7 @@ begin
 process (clk, start)
 variable ints,inta,intm, i : integer;
 variable finalize : STD_LOGIC;
-variable doneTemp: STD_LOGIC := '1';
+variable doneTemp: STD_LOGIC := '0';
 begin
 if (rising_edge(clk)) then
         ints := S'LENGTH/iWidth;
@@ -189,17 +190,17 @@ if (rising_edge(clk)) then
         finalize := '0';
         case state is
             when BeginEnc =>
-                if (doneTemp = '1') then
+                if (start = '0') then
                     rounds <= std_logic_vector(to_unsigned(7,rounds'length));
                     rstK <= '1';
                     rstA <= '1';
                     rstS <= '1';
                     rstF <= '1';
-                else
+                elsif (start = '1') then
                     rstK <= '0';
                     DSlilm <= "0000";
                 end if;
-                 if (start = '1'or doneTemp = '0') then
+                 if (start = '1' or SEL = '2') then
                     doneTemp := '0';
                     i := 0;
                     SEL <= '2';
@@ -332,7 +333,7 @@ if (rising_edge(clk)) then
                     rstS <= '0';
                 end if;
             when TagFinal =>
-                if(doneTemp = '0') then
+                if(setTag = '0') then
                     rstF <= '1';
                     SEL <= '3';
                     rstS <= '0';
@@ -340,6 +341,7 @@ if (rising_edge(clk)) then
                     if (doneTAG = '1')then
                         newTAG <= newc(0 downto 0);
                         firstDone <= '1';
+                        setTag <= '1';
                         rstS <= '1';
                         doneTemp := '1'; -- after last action
                     end if;
@@ -360,6 +362,13 @@ if (rising_edge(clk)) then
                         rstF <= '1';
                         if(rst = '1') then
                             state <= BeginEnc;
+                            doneTemp := '0';
+                            rounds <= std_logic_vector(to_unsigned(7,rounds'length));
+                            rstK <= '1';
+                            rstA <= '1';
+                            rstS <= '1';
+                            rstF <= '1';
+                            setTag <= '0';
                         end if;
                     end if;
                 end if;
