@@ -39,7 +39,6 @@ Generic( iWidth : integer := 128;
          xWidth32 : integer := 4;
          rWidth : integer := 128 );
   Port ( clk : in STD_LOGIC;
-         start: in STD_LOGIC;
          rst : in STD_LOGIC;
          K : in STD_LOGIC_VECTOR(447 downto 0);
          S : in STD_LOGIC_VECTOR(127 downto 0);
@@ -168,13 +167,13 @@ signal PadOut : STD_LOGIC_VECTOR(127 downto 0);
 signal padded : STD_LOGIC;
 signal rounds : STD_LOGIC_VECTOR(3 downto 0);
 signal DSlilm : STD_LOGIC_VECTOR(3 downto 0);
-type stateMachine is (BeginEnc, StaticData1, StaticData2, NonceStep, Associated, CipherText1, CipherText2, CipherPostFor, Padd, TagFinal);
+type stateMachine is (INIT, BeginEnc, StaticData1, StaticData2, NonceStep, Associated, CipherText1, CipherText2, CipherPostFor, Padd, TagFinal);
 type selector is ('0', '1', '2', '3', '4');
-signal State : stateMachine := TagFinal;
+signal State : stateMachine := INIT;
 signal SEL : selector;
 
 begin
-process (clk, start)
+process (clk,rst)
 variable ints,inta,intm, i : integer;
 variable finalize : STD_LOGIC;
 variable doneTemp: STD_LOGIC := '0';
@@ -185,30 +184,31 @@ if (rising_edge(clk)) then
         intm := P'LENGTH/iWidth;
         finalize := '0';
         case state is
-            when BeginEnc =>
-                if (start = '0' or rst = '1') then
-                    rounds <= std_logic_vector(to_unsigned(7,rounds'length));
-                    rstK <= '1';
-                    rstA <= '1';
-                    rstS <= '1';
-                    rstF <= '1';
+            when INIT =>
+                rounds <= std_logic_vector(to_unsigned(7,rounds'length));
+                rstK <= '1';
+                rstA <= '1';
+                rstS <= '1';
+                rstF <= '1';
+                setTag <= '0';
+                if (rst = '1') then
+                    state <= INIT;
+                elsif (rst = '0') then
                     state <= BeginEnc;
-                elsif (start = '1') then
-                    rstK <= '0';
-                    DSlilm <= "0000";
                 end if;
-                 if ((start = '1' and rst = '0') or SEL = '2') then
-                    doneTemp := '0';
-                    i := 0;
-                    SEL <= '2';
-                    if (doneK = '1') then
-                         state <= StaticData1;
-                         statec <= newc;
-                         x <= newx;
-                         r <= (others => '0');
-                         rstK <= '1';
-                    end if;
-                 end if;
+            when BeginEnc =>
+                rstK <= '0';
+                DSlilm <= "0000";
+                doneTemp := '0';
+                i := 0;
+                SEL <= '2';
+                if (doneK = '1') then
+                     state <= StaticData1;
+                     statec <= newc;
+                     x <= newx;
+                     r <= (others => '0');
+                     rstK <= '1';
+                end if;
             when StaticData1 =>
                     absBlocks <= S;
                     doneS1 <= doneAbs;
@@ -334,7 +334,7 @@ if (rising_edge(clk)) then
                     SEL <= '3';
                     rstS <= '0';
                     doneTag <= doneSqe;
-                    if (setTag = '0')then
+                    if (doneTag = '1')then
                         TAG <= newc(0 downto 0);
                         rstS <= '1';
                         setTag <= '1';
@@ -346,14 +346,7 @@ if (rising_edge(clk)) then
                     rstS <= '1';
                     rstF <= '1';
                     if(rst = '1') then
-                        state <= BeginEnc;
-                        doneTemp := '0';
-                        rounds <= std_logic_vector(to_unsigned(7,rounds'length));
-                        rstK <= '1';
-                        rstA <= '1';
-                        rstS <= '1';
-                        rstF <= '1';
-                        setTag <= '0';
+                        state <= INIT;
                     end if;
                 end if;
             when others => finalize := '0';
