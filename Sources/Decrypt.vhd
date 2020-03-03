@@ -190,12 +190,13 @@ if (rising_edge(clk)) then
         finalize := '0';
         case state is
             when BeginEnc =>
-                if (start = '0') then
+                if (start = '0' or rst = '1') then
                     rounds <= std_logic_vector(to_unsigned(7,rounds'length));
                     rstK <= '1';
                     rstA <= '1';
                     rstS <= '1';
                     rstF <= '1';
+                    state <= BeginEnc;
                 elsif (start = '1') then
                     rstK <= '0';
                     DSlilm <= "0000";
