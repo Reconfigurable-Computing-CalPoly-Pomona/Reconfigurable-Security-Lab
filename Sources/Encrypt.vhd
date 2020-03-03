@@ -197,7 +197,7 @@ if (rising_edge(clk)) then
                     rstK <= '0';
                     DSlilm <= "0000";
                 end if;
-                 if (start = '1' or SEL = '2') then
+                 if ((start = '1' and rst = '0') or SEL = '2') then
                     doneTemp := '0';
                     i := 0;
                     SEL <= '2';
