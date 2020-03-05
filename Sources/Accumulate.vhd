@@ -62,43 +62,62 @@ signal enableK : STD_LOGIC:= '0';
 signal enableMux: STD_LOGIC:= '0';
 signal endI: STD_LOGIC := '0';
 signal endK: STD_LOGIC := '0';
+signal firstStart: STD_LOGIC := '0';
 signal J: integer := 0;
 signal L: integer := 0;
-signal Lflag: STD_LOGIC;
-signal tick: STD_LOGIC;
+signal Lflag : STD_LOGIC;
 signal stateSave: STD_LOGIC_VECTOR(StateSize - 1 downto 0);
+signal itmp,ktmp,cpart: STD_LOGIC_VECTOR(StateSize - 1 downto 0);
+constant AF : integer := CapacitySize/StateSize;
+constant nw : integer := StateSize/32;
 begin
 
-process(clk) 
-variable itmp, ktmp: STD_LOGIC_VECTOR(StateSize - 1 downto 0);
-variable AF,nw,low,high: integer;
-variable cpart:  STD_LOGIC_VECTOR(StateSize - 1 downto 0);
+process(clk)
 begin
-nw := StateSize/32; 
-AF := CapacitySize/StateSize;
 if rising_edge(clk) then
-    if start = '1' and running = '0' then
-    running <= '0';
-    ktmp := state;
-    for J in 0 to AF -1 loop
-        cpart := capacity((J+1)*StateSize - 1 downto J*StateSize);
-        for L in 0 to nw -1 loop
-            low := ((L+J)mod nw)*32;
-            high := low + 32;
-            itmp((L+1)*32 - 1 downto L*32) := ktmp((L+1)*32 - 1 downto L*32) xor cpart(high -1 downto low);
-        end loop;
-        ktmp := itmp;
-    end loop;
-    newstate <= ktmp;
-    done <= '1';
+    if start = '1' then
+    if firstStart = '0' then
+        Lflag <= '0';
+        firstStart <= '1';
+    end if;
+    ktmp <= state;
+    if (J < AF - 1) then
+        if (Lflag = '1' or  firstStart = '0') then
+        cpart <= capacity((J+1)*StateSize - 1 downto J*StateSize);
+        Lflag <= '0';
+        else
+        ktmp <= itmp;
+        J <= J + 1;
+        Lflag <= '1';
+        end if;
+    else
+        newstate <= ktmp;
+        done <= '1';
+        firstStart <= '0';
+        J <= 0;
+    end if;
     else
         done <= '0';
     end if;
 end if;
 if state = stateSave then
 else
-    running <= '0';
     stateSave <= state;
 end if;
 end process;
+
+LProc: process(Lflag) 
+variable low,high: integer;
+variable temptemp,ktemptemp : STD_LOGIC_VECTOR(StateSize - 1 downto 0);
+begin
+    if (Lflag = '0') then
+        ktemptemp := ktmp;
+        for L in 0 to nw -1 loop
+            low := ((L+J)mod nw)*32;
+            high := low + 32;
+            temptemp((L+1)*32 - 1 downto L*32) := ktemptemp((L+1)*32 - 1 downto L*32) xor cpart(low + 31 downto low);
+        end loop;
+        itmp <= temptemp;
+    end if;
+end process LProc;
 end Behavioral;
