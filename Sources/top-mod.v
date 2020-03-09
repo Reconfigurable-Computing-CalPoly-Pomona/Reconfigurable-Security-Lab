@@ -34,13 +34,18 @@ module top_mod(
     reg[127:0] NONCE = 128'h64646f6e277420726561642074686973;
     wire[127:0] P;
     wire[127:0] C;
-    reg[14:0] count = 0;
+    reg[20:0] count = 0;
     reg[3:0] toSeg;
+    reg resetEnc;
     assign P = {112'h646e277420646563727970742074,SW};
     always@(posedge clk)
     begin
+        if(rst == 1'b1)
+            resetEnc = 1'b1;
+        else
+            resetEnc = 1'b0;
         count = count + 1;
-        case(count[14:12])
+        case(count[20:18])
             3'b000: 
             begin
                 An = 8'b11111110;
@@ -84,6 +89,6 @@ module top_mod(
         endcase
     end
     
-    Encrypt enc(count[10],rst,K,S,A,NONCE,P,C,tag,done);
+    Encrypt enc(count[8],rst,K,S,A,NONCE,P,C,tag,done);
     SevenSeg encoder(toSeg,Seg);
 endmodule
