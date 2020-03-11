@@ -84,6 +84,7 @@ module ksneq32 #(parameter MINWIDTH_K = 128, parameter KWIDTHMAX = 192, paramete
         newJ = newJ;
         match = match;
         //prevI = prevI;
+        iReset = iReset;
         
         case(curr_state)
             INITIALIZE: begin
@@ -95,6 +96,7 @@ module ksneq32 #(parameter MINWIDTH_K = 128, parameter KWIDTHMAX = 192, paramete
                 gasReset = 1'b1;
                 newJ = 1;
                 //prevI = 0;
+                iReset = 1'b0;
                 
                 if (kWidth == FULL) begin
                     cout = k[CWIDTH-1:0];
@@ -214,6 +216,7 @@ module ksneq32 #(parameter MINWIDTH_K = 128, parameter KWIDTHMAX = 192, paramete
                 cout = cout;
                 xout = xout;
                 done = 1'b1;
+                iReset = 1'b1;
                 next_state = DONE;
             end
 

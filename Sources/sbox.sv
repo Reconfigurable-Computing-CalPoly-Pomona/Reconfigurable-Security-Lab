@@ -162,17 +162,17 @@ module sbox #(parameter CWIDTH = 127) (
     //output
     assign cout = cReg;
     
-    select #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
+    selec_t #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
         .inputVal(cSel1),
         .index(index1),
-        .out(out1),
+        .out1(out1),
         .reset(reset)
     );
     
-    select #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select2 (
+    selec_t #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select2 (
         .inputVal(cSel2),
         .index(index2),
-        .out(out2),
+        .out1(out2),
         .reset(reset)
     );
 endmodule

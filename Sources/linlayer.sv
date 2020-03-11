@@ -56,11 +56,11 @@ module linlayer #(parameter CWORDS64 = 9) (
     end
     
     
-    select #(.INPUT_WIDTH(576), .OUT_WIDTH(64)) selC (
+    selec_t #(.INPUT_WIDTH(576), .OUT_WIDTH(64)) selC (
         .inputVal(c),
         .reset(reset),
         .index(i),
-        .out(w)
+        .out1(w)
     );
     
     BiRotR first (

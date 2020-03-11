@@ -44,18 +44,16 @@ module Gascon_Core_Round #(parameter CWIDTH = 320, parameter ROUND_COUNT = 16)(
     
     always_comb
     begin
-        if (~reset) begin
-            c_reg_int = c;
-            shift_reg=((mask - round) << 4);
-            shift_reg = shift_reg | round;
-            c_reg_int[MID*64 +: 64] = shift_reg^c_reg;
-        end
+        c_reg_int = c;
+        shift_reg=((mask - round) << 4);
+        shift_reg = shift_reg | round;
+        c_reg_int[MID*64 +: 64] = shift_reg^c_reg;
     end
     
-    select #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
+    selec_t #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
         .inputVal(c),
         .index(MID),
-        .out(c_reg),
+        .out1(c_reg),
         .reset(reset)
     );
     

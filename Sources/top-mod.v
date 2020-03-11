@@ -49,46 +49,46 @@ module top_mod(
             3'b000: 
             begin
                 An = 8'b11111110;
-                toSeg = C[4:0];
+                toSeg = {C[3],C[2],C[1],C[0]};
             end
             3'b001:
             begin
                 An = 8'b11111101;
-                toSeg = C[8:4];
+                toSeg = {C[7],C[6],C[5],C[4]};
             end
             3'b010:
             begin
                 An = 8'b11111011;
-                toSeg = C[12:8];
+                toSeg = {C[11],C[10],C[9],C[8]};
             end
             3'b011:
             begin
                 An = 8'b11110111;
-                toSeg = C[16:12];
+                toSeg = {C[15],C[14],C[13],C[12]};
             end
             3'b100:
             begin
                 An = 8'b11101111;
-                toSeg = C[20:16];
+                toSeg = {C[19],C[18],C[17],C[16]};
             end
             3'b101:
             begin
                 An = 8'b11011111;
-                toSeg = C[24:20];
+                toSeg = {C[23],C[22],C[21],C[20]};
             end
             3'b110:
             begin
                 An = 8'b10111111;
-                toSeg = C[28:24];
+                toSeg = {C[27],C[26],C[25],C[24]};
             end
             3'b111:
             begin
                 An = 8'b01111111;
-                toSeg = C[32:28];
+                toSeg = {C[31],C[30],C[29],C[28]};
             end
         endcase
     end
     
-    Encrypt enc(count[8],rst,K,S,A,NONCE,P,C,tag,done);
+    Encrypt enc(clk,resetEnc,K,S,A,NONCE,P,C,tag,done);
     SevenSeg encoder(toSeg,Seg);
 endmodule

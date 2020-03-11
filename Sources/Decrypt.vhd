@@ -187,6 +187,20 @@ if (rising_edge(clk)) then
         inta := A'LENGTH/iWidth;
         intm := P'LENGTH/iWidth;
         finalize := '0';
+         if (rst = '1') then
+            rounds <= std_logic_vector(to_unsigned(7,rounds'length));
+            rstK <= '1';
+            rstA <= '1';
+            rstS <= '1';
+            rstF <= '1';
+            setTag <= '0';
+            doneS1 <= '0';
+            doneS2 <= '0';
+            doneN1 <= '0';
+            doneN2 <= '0';
+            doneTemp := '0';
+            state <= INIT;
+        else
         case state is
             when INIT =>
                 rounds <= std_logic_vector(to_unsigned(7,rounds'length));
@@ -195,6 +209,11 @@ if (rising_edge(clk)) then
                 rstS <= '1';
                 rstF <= '1';
                 setTag <= '0';
+                doneS1 <= '0';
+                doneS2 <= '0';
+                doneN1 <= '0';
+                doneN2 <= '0';
+                doneTemp := '0';
                 if (rst = '1') then
                     state <= INIT;
                 elsif (rst = '0') then
@@ -368,6 +387,7 @@ if (rising_edge(clk)) then
                 end if;
             when others => finalize := '0';
         end case;
+        end if;
         fin <= finalize;
 end if;
 done <= doneTemp;

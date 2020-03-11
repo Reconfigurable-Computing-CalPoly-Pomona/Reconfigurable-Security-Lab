@@ -132,24 +132,24 @@ module mixsx32 #(parameter CWORDS64 = 2, parameter XWORDS32 = 2) (
 //            coutArray[(2*i_xor) +: 32] = xorArray[i_xor];
         
     
-    select #(.INPUT_WIDTH(DWIDTH), .OUT_WIDTH(IDX_WIDTH)) selectIDX (
+    selec_t #(.INPUT_WIDTH(DWIDTH), .OUT_WIDTH(IDX_WIDTH)) selectIDX (
         .inputVal(d),
         .index(i),
-        .out(idxTemp),
+        .out1(idxTemp),
         .reset(reset)
     );
     
-    select #(.INPUT_WIDTH(XWIDTH), .OUT_WIDTH(32)) selectXW (
+    selec_t #(.INPUT_WIDTH(XWIDTH), .OUT_WIDTH(32)) selectXW (
         .inputVal(x),
         .index(idxNext),
-        .out(xwTemp),
+        .out1(xwTemp),
         .reset(reset)
     );
     
-    select #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(32)) selectC (
+    selec_t #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(32)) selectC (
         .inputVal(c),
         .index(2*i),
-        .out(cTemp),
+        .out1(cTemp),
         .reset(reset)
     );
     
