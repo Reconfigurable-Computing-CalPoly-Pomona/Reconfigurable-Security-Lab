@@ -44,19 +44,34 @@ module Gascon_Core_Round #(parameter CWIDTH = 320, parameter ROUND_COUNT = 16)(
     
     always_comb
     begin
-        c_reg_int = c;
-        shift_reg=((mask - round) << 4);
-        shift_reg = shift_reg | round;
-        c_reg_int[MID*64 +: 64] = shift_reg^c_reg;
+        shift_reg = shift_reg;
+        c_reg_int = c_reg_int;
+        
+        if (~reset) begin
+            c_reg_int = c;
+            shift_reg=((mask - round) << 4);
+            shift_reg = shift_reg | round;
+            c_reg_int[MID*64 +: 64] = shift_reg^c_reg;
+        end
+        else begin
+            shift_reg = 0;
+            c_reg_int = 0;
+        end
     end
     
-    selec_t #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
-        .inputVal(c),
-        .index(MID),
-        .out1(c_reg),
-        .reset(reset)
-    );
+//    selec_t #(.INPUT_WIDTH(CWIDTH), .OUT_WIDTH(64)) select1 (
+//        .inputVal(c),
+//        .index(MID),
+//        .out1(c_reg),
+//        .reset(reset)
+//    );
     
+    always_comb begin
+        c_reg = c_reg;
+        
+        if (~reset) c_reg = c[MID*64 +: 64];
+        else c_reg = 0;
+    end
    
     sbox #(.CWIDTH(CWIDTH)) sBOX (
         .c(c_reg_int),
@@ -73,4 +88,18 @@ module Gascon_Core_Round #(parameter CWIDTH = 320, parameter ROUND_COUNT = 16)(
         .reset(reset | ~linlayer_en),
         .done(done)
     );
+    
+//    ila_gascon_internal ila_gascon(
+//        .clk(clk),
+//        .probe0(c),
+//        .probe1(cout),
+//        .probe2(reset),
+//        .probe3(done),
+//        .probe4(c_reg),
+//        .probe5(c_reg_int),
+//        .probe6(c_reg_sbox),
+//        .probe7(shift_reg)
+//    );
+
+
 endmodule

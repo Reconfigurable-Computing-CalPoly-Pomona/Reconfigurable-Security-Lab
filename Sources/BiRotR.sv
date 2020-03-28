@@ -23,6 +23,7 @@
 module BiRotR(
     input logic [63:0] in,
     input logic [$clog2(64)-1:0] shift,
+    input logic reset,
     output logic [63:0] out
 );
 
@@ -34,32 +35,35 @@ module BiRotR(
     logic [31:0] y1, y2;
         
     always_comb begin
-        shift2 = shift/2;
-        i0 =  in[31:0];
-        i1 = in[63:32];
-        
-        if (shift & 1) begin
-            a1 = i1;
-            amt1 = shift2;
-            t = y1;
-            
-            a2 = i0;
-            amt2 = ((shift2+1) % 32);
-            i1 = y2;
-            i0 = t;            
-        end
-        
+        if (reset) out = 0;
         else begin
-            a1 = i0;
-            amt1 = shift2;
-            i0 = y1;
+            shift2 = shift/2;
+            i0 =  in[31:0];
+            i1 = in[63:32];
             
-            a2 = i1;
-            amt2 = (shift2);
-            i1 = y2;
-        end
-        
-        out = {i1,i0};        
+            if (shift & 1) begin
+                a1 = i1;
+                amt1 = shift2;
+                t = y1;
+                
+                a2 = i0;
+                amt2 = ((shift2+1) % 32);
+                i1 = y2;
+                i0 = t;            
+            end
+            
+            else begin
+                a1 = i0;
+                amt1 = shift2;
+                i0 = y1;
+                
+                a2 = i1;
+                amt2 = (shift2);
+                i1 = y2;
+            end
+            
+            out = {i1,i0};
+        end        
     end
     
     double_shifter_fullPara_top #(.N(5)) shifter1 (
