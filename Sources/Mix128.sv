@@ -26,69 +26,77 @@ module Mix128 #(parameter CWIDTH = 127, parameter XWORDS32 = 2, parameter DS_WID
     input logic [127:0] i,
     input logic [DS_WIDTH-1:0] ds,
     output logic [CWIDTH-1:0] cout,
-    input logic clk, reset,
+    input logic clk, reset, en,
     output logic done
     );
     
+    localparam NUMER = 132;
     localparam CWORDS64 = CWIDTH/64;
     localparam IDX_WIDTH = $clog2(XWORDS32);
     localparam DWIDTH = CWORDS64*IDX_WIDTH;
-    localparam MIXROUNDS = (128+4)/DWIDTH;
+    localparam MIXROUNDS = (NUMER)/DWIDTH;
     
-    logic [255:0] iReg;
-    logic [$clog2(256/DWIDTH) - 1:0] j;
-    logic [DWIDTH-1:0] selOut, dReg;
-    logic [CWIDTH-1:0] cReg, mixOut, gasOut;
-    logic doneFor, mixDone, gasDone, mixReset, gasReset, increment;
+    logic [(DS_WIDTH+128)-1:0] i_value;
+    logic [$clog2(MIXROUNDS) - 1:0] j;
+    logic [DWIDTH-1:0] selOut, d;
+    logic [CWIDTH-1:0] cReg, mixOut, gasOut, cRegNext;
+    logic doneFor, mixDone, gasDone, mixReset, gasReset, increment, gas_en, mix_en;
     
     
-    typedef enum {FIRST,START,WAITMIX,WAITGAS,DONEFOR, LAST, DONE} stateType;
+    typedef enum {RESET, INIT,START, WAITMIX, WAITGAS, DONEFOR, LAST, DONE} stateType;
     stateType curr_state, next_state;
     
     assign doneFor = (j >= MIXROUNDS-1) ? 1'b1:1'b0;
-    assign iReg = {ds,i};
-    assign cout = (done) ? cReg : 0;
+    assign i_value = {ds,i};
+//    assign cout = (done) ? cReg : 0;
     
     
     //Counter Logic
-    always_ff @ (posedge clk, posedge reset)
+    always_ff @ (posedge clk)
         if (reset) j <= 0;
         else if (doneFor) j <= j;
         else if (increment) j <= j + 1;
         else j <= j;
+    
+    //Register for Holding Coutput between iterations and modules  
+    always_ff @ (posedge clk)
+        if (reset) cReg <= 0;
+        else cReg <= cRegNext;
       
     //State Register Block  
-    always_ff @ (posedge clk, posedge reset)
-        if (reset) curr_state <= FIRST;
+    always_ff @ (posedge clk)
+        if (reset) curr_state <= RESET;
         else curr_state <= next_state;
         
     //Next State Logic
     always_comb
     begin
-        increment = 1'b0;
+//        increment = 1'b0;
         case(curr_state) 
-            FIRST:
+            RESET:
+                if (en) next_state = INIT;
+                else next_state = RESET;
+                
+            INIT:
                 next_state = START;
-            START:
-                next_state = WAITMIX;
+            
+            START: next_state = WAITMIX;
             
             WAITMIX: 
                 if (mixDone) next_state = WAITGAS;
                 else next_state = WAITMIX;
                 
             WAITGAS:
-                if (gasDone) 
-                begin
+                if (gasDone) begin
                     if ((j + 1) >= MIXROUNDS-1) //if J incremented again would it be done?
-                    begin   //if so, jump to doneFor and increment one more time since Sel uses MIXROUNDS-1 for index
+                    //if so, jump to doneFor and increment one more time since Sel uses MIXROUNDS-1 for index
                         next_state = DONEFOR;
-                        increment = 1'b1;
-                    end
+//                        increment = 1'b1;
+
                     else    //otherwise, keep iterating thru the for loop and jump to start
-                    begin 
                         next_state = START;
-                        increment = 1'b1;
-                    end
+//                        increment = 1'b1;
+                    
                 end
                 else next_state = WAITGAS;  //if gas isnt done stay in this state
                 
@@ -103,82 +111,105 @@ module Mix128 #(parameter CWIDTH = 127, parameter XWORDS32 = 2, parameter DS_WID
                 next_state = DONE;   
                 
             default:
-            next_state = FIRST;
+            next_state = RESET;
         endcase  
     end
     
     //Logic based on Curr-State    
-    always_comb
+    always_comb begin
+        //default values for combinational signals
+        gas_en = 0;
+        done = 0;
+        mix_en = 0;
+        cRegNext = cReg;
+        mixReset = 0;
+        gasReset = 0;
+        increment = 0;
+        
         case(curr_state) 
-            FIRST: 
+            RESET: 
             begin
-                mixReset = 1'b1;
-                gasReset = 1'b1;
-                cReg = c;    
+                //statements not really necessary(default), all flip flops will reset here
+                //this state will hold until enable pulse is detected
+                gas_en = 0;
+                mix_en = 0;
+                mixReset = 0;
+                increment = 0;
+            end
+            
+            INIT: begin
+                //enable pulse detected, so register the c input into cReg
+                cRegNext = c;
+                increment = 0;  //dont start incrementing counter yet
             end
             
             START:
             begin
+                //this state is when the loop reruns, both modules are reset and then enabled 
+                //in the following states
                 mixReset = 1'b1;
                 gasReset = 1'b1;
-                cReg = cReg;
-                dReg = selOut;
+                cRegNext = cReg; //current cReg is maintained
                 done = 1'b0;
+                increment = 0;
             end
             
             WAITMIX: 
             begin
-                mixReset = 1'b0;
-                gasReset = 1'b1;
-                dReg = dReg;
+                //mix is enabled here and run
+                mix_en = 1;
                 done = 1'b0;
-                if (mixDone) cReg = mixOut;
-                else cReg = cReg;
+                if (mixDone) cRegNext = mixOut; //if mix is finished, then load its output into Creg
+                else cRegNext = cReg;           //otherwise, maintain value of Creg
             end
                 
             WAITGAS:
             begin
-                gasReset = 1'b0;
-                mixReset = 1'b0;
-                dReg = dReg;
+                //now gascon runs, so we enable it and wait for it to finish
+                gas_en = 1;
                 done = 1'b0;
-                if (gasDone) cReg = gasOut;
-                else cReg = cReg;
+                if (gasDone) begin
+                    cRegNext = gasOut; //if gas is finished, load output into cReg
+                    increment = 1'b1; //we now increment the counter for START or LAST state
+                end
+                else cRegNext = cReg;           //otherwise, maintain value of creg
             end
             
             DONEFOR:
             begin
-                cReg = cReg;
-                {mixReset, gasReset} = {1'b1,1'b1};
-                dReg = selOut;     
+                //the for loop is finished
+                cRegNext = cReg; //maintain value of cReg
+                mixReset = 1'b1; //reset mix because its going to be used one more time
+                mix_en = 0; //disable so that it doesnt start before next state
             end
             
             LAST:
             begin
-                mixReset = 1'b0;
-                gasReset = 1'b1;
-                done = 1'b0;
-                dReg = dReg;
-                if (mixDone)
-                begin
-                    cReg = mixOut;
-                    done = 1'b1;
-                end 
-                else cReg = cReg;      
+                mixReset = 1'b0; //turn off reset
+                mix_en = 1; //enable mix to start
+
+                if (mixDone) cRegNext = mixOut; //if mix is done then load output into cReg
+                else cRegNext = cReg; //otherwise hold cReg
             end
                 
             DONE: 
             begin
-                cReg = cReg;
+                cout = cReg;
+                cRegNext = cReg;
                 done = 1'b1;
             end
                   
-            default: ;
-//            next_state = START;
+            default: begin//the default is the reset state
+                gas_en = 0;
+                mix_en = 0;
+                mixReset = 0;
+                increment = 0;
+            end
         endcase 
-    
-//    always_comb begin
-//        if (j == 0) cReg = c;
+    end //end always_comb
+        
+        //    always_comb begin
+    //        if (j == 0) cReg = c;
         
 //        if (!doneFor) begin
 //            done = 1'b0;
@@ -201,30 +232,41 @@ module Mix128 #(parameter CWIDTH = 127, parameter XWORDS32 = 2, parameter DS_WID
 //        end
 //    end
     
-    selec_t #(.INPUT_WIDTH(256), .OUT_WIDTH(DWIDTH)) select1 (
-        .inputVal(iReg),
-        .index(j),
-        .out1(selOut),
-        .reset(reset)
-    );
+//    selec_t #(.INPUT_WIDTH(256), .OUT_WIDTH(DWIDTH)) select1 (
+//        .inputVal(iReg),
+//        .index(j),
+//        .out1(selOut),
+//        .reset(reset)
+//    );
+    
+    //Comb Block that replaces select
+    assign d = selOut;
+    always_comb begin
+        if (reset) selOut = 0;
+        else selOut = i_value[(j*DWIDTH) +: DWIDTH];
+        
+    
+    end
     
     mixsx32 #(.CWORDS64(CWORDS64), .XWORDS32(XWORDS32)) mix32 (
         .clk(clk),
         .reset(reset | mixReset),
+        .en(mix_en),
         .c(cReg),
         .x(x),
-        .d(dReg),
+        .d(d),
         .cout(mixOut),
-        .data_rdy(mixDone)
+        .done(mixDone)
     );
     
-    Gascon_Core_Round #(.CWIDTH(CWIDTH), .ROUND_COUNT(1)) das_dat_gas (
+    Gascon_Core_Round #(.CWIDTH(CWIDTH), .ROUND_COUNT(1)) gascon (
         .c(cReg),
         .clk(clk),
         .reset(gasReset | reset),
         .round(1'b0),
         .cout(gasOut),
-        .done(gasDone)
+        .done(gasDone),
+        .en(gas_en)
     );
     
     

@@ -35,7 +35,17 @@ module BiRotR(
     logic [31:0] y1, y2;
         
     always_comb begin
-        if (reset) out = 0;
+        if (reset) begin
+            out = 0;
+            i0 = 0;
+            i1 = 0;
+            t = 0;
+            shift2 = 0;
+            a1 = 0;
+            a2 = 0;
+            amt1 = 0;
+            amt2 = 0;
+        end
         else begin
             shift2 = shift/2;
             i0 =  in[31:0];
