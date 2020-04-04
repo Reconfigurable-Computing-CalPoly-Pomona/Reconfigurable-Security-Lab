@@ -38,12 +38,12 @@ module squeez #(parameter CWIDTH = 320,
                 );
                 logic [CWIDTH-1:0] cReg, g_cin, coReg, cRegNext, g_cinNext;
                 logic Ggo,Bsave;
-                logic [REMAINWIDTH-1:0] remainReg;//remainRegNext;
+                logic [REMAINWIDTH-1:0] remainReg,remainRegNext;
                 logic [RWIDTH-1:0] rReg;
                 logic [RWIDTH-1:0] roReg;
                 logic [CWIDTH-1:0] roSReg;
-                logic [CWIDTH-1:0] roSSReg;
-                logic [RWIDTH-1:0] len;
+                logic [CWIDTH-1:0] roSSReg,roSSRegNext;
+                logic [RWIDTH-1:0] len,lenNext;
                 logic [CWIDTH-1:0] bReg,bRegNext;
                 typedef enum {RESET, START, REMAINCHECK, BCONCATINATE, REMAIN2WIDTH, SELWAIT, REMAININGZERO, GWAIT, DONE} state_type;
                 state_type curr_state, next_state;
@@ -71,14 +71,22 @@ module squeez #(parameter CWIDTH = 320,
                 //remainReg Block Register
                 always_ff @(posedge clk)
                     if (reset) remainReg <= 0;
-                    else if (curr_state == START) remainReg <= remaining;
-                    else if (curr_state == BCONCATINATE) remainReg <= remainReg - len;
-                    else remainReg <= remainReg;
+                    else remainReg <= remainRegNext;
                 
                 //bData Block Register
                 always_ff @(posedge clk)
-                    if (squeezDone) Bdata <= 0;
-                    else Bdata <= bReg;
+                    if (squeezDone) Bdata <= bReg;
+                    else Bdata <= 0;
+                
+                //len Block Register
+                always_ff @(posedge clk)
+                    if (reset) len <= 0;
+                    else len <= lenNext;
+                 
+                 //roSSReg
+                 always_ff @(posedge clk)
+                    if (reset) roSSReg <= 0;
+                    else roSSReg <= roSSRegNext;
                 
                 //Case for FSM
                 always_comb begin
@@ -88,6 +96,10 @@ module squeez #(parameter CWIDTH = 320,
                     cRegNext = cReg;
                     next_state = curr_state;
                     Bsave = 1'b0;
+                    lenNext = len;
+                    roSSRegNext = roSSReg;
+                    remainRegNext = remainReg;
+                    bRegNext = bReg;
                     case (curr_state)
                          RESET:
                             begin
@@ -97,8 +109,9 @@ module squeez #(parameter CWIDTH = 320,
                                 cRegNext = 0;
                                 bRegNext = 0;
                                 Bsave = 1'b0;
-                                roSSReg = 0;
-                                //remainRegNext = 0;
+                                roSSRegNext = 0;
+                                lenNext = 0;
+                                remainRegNext = 0;
                                 if (en) next_state = START;
                                 else next_state = RESET;                            
                             end
@@ -108,12 +121,11 @@ module squeez #(parameter CWIDTH = 320,
                                     bRegNext = r[0];
                                     next_state = DONE;
                                 end 
-                                len = RWIDTH; //1
-                                //remainRegNext=remaining; 
-                                if (reset) next_state = START;
-                                else next_state = REMAINCHECK;
+                                lenNext = RWIDTH; //1
+                                remainRegNext=remaining;
+                                next_state = REMAINCHECK;
                                 bRegNext = 0;
-                                roSSReg = r;    //take in initial r value 
+                                roSSRegNext = r;    //take in initial r value 
                                 cRegNext = c; //take in C;
                                 Ggo = 1'b0;
                                 squeezDone = 1'b0;
@@ -122,22 +134,26 @@ module squeez #(parameter CWIDTH = 320,
                         REMAINCHECK: 
                             begin
 //                            Ggo = 1'b0;
+                            lenNext = len;
                             if(remainReg > 0)//2
+                            begin
                                 next_state = REMAIN2WIDTH;
+                            end
                             else
                                 next_state = DONE;
                             end
                         REMAIN2WIDTH: 
                             begin
+                            lenNext = len;
                             if (remainReg < RWIDTH)//3
                                 begin
-                                    len = remainReg;//4
+                                    lenNext = remainReg;//4
                                 end
                                 next_state = BCONCATINATE; 
                             end
                         BCONCATINATE: begin
                             bRegNext = bReg | (roSSReg << (CWIDTH-remainReg));
-                            //remainRegNext = remainReg-len; 
+                            remainRegNext = remainReg-len; 
                             next_state = REMAININGZERO; 
                         end
                         REMAININGZERO:  
@@ -149,7 +165,9 @@ module squeez #(parameter CWIDTH = 320,
                                 next_state = GWAIT;
                             end
                             else
+                            begin
                                 next_state = REMAINCHECK;
+                            end
                         end
 //                        SELWAIT:    
 //                            begin
@@ -168,7 +186,7 @@ module squeez #(parameter CWIDTH = 320,
                                 if (Gdone == 1) begin //10 
                                     next_state = REMAINCHECK;
                                     cRegNext = coReg;
-                                    roSSReg = roReg;
+                                    roSSRegNext = roReg;
                                 end
                                 else next_state = GWAIT;  
                             end

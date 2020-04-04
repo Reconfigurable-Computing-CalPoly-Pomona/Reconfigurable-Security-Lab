@@ -110,6 +110,7 @@ LProc: process(Lflag)
 variable low,high: integer;
 variable temptemp,ktemptemp : STD_LOGIC_VECTOR(StateSize - 1 downto 0);
 begin
+    itmp <= (others => '0'); 
     if (Lflag = '0') then
         ktemptemp := ktmp;
         for L in 0 to nw -1 loop
