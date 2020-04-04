@@ -71,7 +71,9 @@ module Mix128 #(parameter CWIDTH = 127, parameter XWORDS32 = 2, parameter DS_WID
     //Next State Logic
     always_comb
     begin
-//        increment = 1'b0;
+        //default value
+        next_state = curr_state;
+        
         case(curr_state) 
             RESET:
                 if (en) next_state = INIT;
@@ -125,6 +127,7 @@ module Mix128 #(parameter CWIDTH = 127, parameter XWORDS32 = 2, parameter DS_WID
         mixReset = 0;
         gasReset = 0;
         increment = 0;
+        cout = 0;
         
         case(curr_state) 
             RESET: 
@@ -204,6 +207,7 @@ module Mix128 #(parameter CWIDTH = 127, parameter XWORDS32 = 2, parameter DS_WID
                 mix_en = 0;
                 mixReset = 0;
                 increment = 0;
+                cout = 0;
             end
         endcase 
     end //end always_comb
