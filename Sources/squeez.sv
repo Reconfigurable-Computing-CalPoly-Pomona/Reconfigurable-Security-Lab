@@ -27,7 +27,7 @@ module squeez #(parameter CWIDTH = 320,
                 parameter REMAINWIDTH = 20,
                 parameter ROUND_COUNT = 10)
                 (
-                input  logic clk, reset, big,
+                input  logic clk, reset, big, en,
                 output logic seldone, Gdone,
                 input  logic [CWIDTH-1:0] c, // capacity
                 output logic [CWIDTH-1:0] Bdata, //output data
@@ -36,55 +36,85 @@ module squeez #(parameter CWIDTH = 320,
                 input  logic [ROUND_COUNT-1:0] rounds,
                 output logic squeezDone
                 );
-                logic [CWIDTH-1:0] cReg, g_cin, coReg;
-                logic Ggo;
-                logic [REMAINWIDTH-1:0] remainReg;
+                logic [CWIDTH-1:0] cReg, g_cin, coReg, cRegNext, g_cinNext;
+                logic Ggo,Bsave;
+                logic [REMAINWIDTH-1:0] remainReg;//remainRegNext;
                 logic [RWIDTH-1:0] rReg;
                 logic [RWIDTH-1:0] roReg;
                 logic [CWIDTH-1:0] roSReg;
                 logic [CWIDTH-1:0] roSSReg;
                 logic [RWIDTH-1:0] len;
-                logic [CWIDTH-1:0] bReg;
-                typedef enum {START, REMAINCHECK, BCONCATINATE, REMAIN2WIDTH, SELWAIT, REMAININGZERO, GWAIT, DONE} state_type;
-                state_type curr_state, next_state, prev_state;
-    
+                logic [CWIDTH-1:0] bReg,bRegNext;
+                typedef enum {RESET, START, REMAINCHECK, BCONCATINATE, REMAIN2WIDTH, SELWAIT, REMAININGZERO, GWAIT, DONE} state_type;
+                state_type curr_state, next_state;
 
-                //FF for State:
-                always_ff @(posedge clk, posedge reset)
-                    if (reset)
-                    begin
-                        curr_state <= START;
-                        prev_state <= START;
-                    end
-                    else
-                    begin
-                        prev_state <= curr_state;
-                        curr_state <= next_state;
-                    end
-
-
+                //State Register Block  
+                always_ff @ (posedge clk)
+                    if (reset) curr_state <= RESET;
+                    else curr_state <= next_state;
+        
+                //cReg Block Register
+                always_ff @ (posedge clk)
+                    if (reset) cReg <= 0;
+                    else cReg <= cRegNext;
+                    
+                //g_cin Block Register
+                 always_ff @ (posedge clk)
+                    if (reset) g_cin <= 0;
+                    else g_cin <= g_cinNext;
+                
+                //bReg Block Register
+                always_ff @ (posedge clk)
+                    if (reset) bReg <= 0;
+                    else bReg <= bRegNext;
+                
+                //remainReg Block Register
+                always_ff @(posedge clk)
+                    if (reset) remainReg <= 0;
+                    else if (curr_state == START) remainReg <= remaining;
+                    else if (curr_state == BCONCATINATE) remainReg <= remainReg - len;
+                    else remainReg <= remainReg;
+                
+                //bData Block Register
+                always_ff @(posedge clk)
+                    if (squeezDone) Bdata <= 0;
+                    else Bdata <= bReg;
+                
                 //Case for FSM
                 always_comb begin
-                    g_cin = g_cin;
-                    Ggo = Ggo;
-                    squeezDone = squeezDone;
-                    cReg = cReg;
-                    Bdata = Bdata;
-                    
-                case (curr_state)
+                    g_cinNext = g_cin;
+                    Ggo = 1'b0;
+                    squeezDone = 1'b0;
+                    cRegNext = cReg;
+                    next_state = curr_state;
+                    Bsave = 1'b0;
+                    case (curr_state)
+                         RESET:
+                            begin
+                                g_cinNext = 0;
+                                Ggo = 1'b0;
+                                squeezDone = 1'b0;
+                                cRegNext = 0;
+                                bRegNext = 0;
+                                Bsave = 1'b0;
+                                roSSReg = 0;
+                                //remainRegNext = 0;
+                                if (en) next_state = START;
+                                else next_state = RESET;                            
+                            end
                          START:
                             begin
                                 if (!big && !reset) begin
-                                    bReg = r[0];
+                                    bRegNext = r[0];
                                     next_state = DONE;
                                 end 
                                 len = RWIDTH; //1
-                                remainReg=remaining; 
+                                //remainRegNext=remaining; 
                                 if (reset) next_state = START;
                                 else next_state = REMAINCHECK;
-                                bReg = 0;
+                                bRegNext = 0;
                                 roSSReg = r;    //take in initial r value 
-                                cReg = c; //take in C;
+                                cRegNext = c; //take in C;
                                 Ggo = 1'b0;
                                 squeezDone = 1'b0;
                                 
@@ -106,8 +136,8 @@ module squeez #(parameter CWIDTH = 320,
                                 next_state = BCONCATINATE; 
                             end
                         BCONCATINATE: begin
-                            bReg = bReg | (roSSReg << (CWIDTH-remainReg));
-                            remainReg = remainReg-len; 
+                            bRegNext = bReg | (roSSReg << (CWIDTH-remainReg));
+                            //remainRegNext = remainReg-len; 
                             next_state = REMAININGZERO; 
                         end
                         REMAININGZERO:  
@@ -115,7 +145,7 @@ module squeez #(parameter CWIDTH = 320,
                             if (remainReg > 0)//9
                             begin
                                 Ggo = 1'b0;
-                                g_cin = cReg;
+                                g_cinNext = cReg;
                                 next_state = GWAIT;
                             end
                             else
@@ -137,19 +167,25 @@ module squeez #(parameter CWIDTH = 320,
                                 Ggo = 1'b1;
                                 if (Gdone == 1) begin //10 
                                     next_state = REMAINCHECK;
-                                    cReg = coReg;
+                                    cRegNext = coReg;
                                     roSSReg = roReg;
                                 end
                                 else next_state = GWAIT;  
                             end
                         DONE:
                             begin
-                            Bdata = bReg;
+                            Ggo = 1'b0;
                             squeezDone = 1'b1;
+                            next_state = DONE;
                             end
+                        default: begin
+                            g_cinNext = g_cin;
+                            Ggo = 1'b0;
+                            squeezDone = 1'b0;
+                            cRegNext = cReg;
+                            Bsave = 1'b0;
+                        end
                 endcase
-
-
             end
     G #(.CWIDTH(CWIDTH), .RWIDTH(RWIDTH), .ROUND_COUNT(ROUND_COUNT)) g (
         .c(g_cin),
@@ -157,6 +193,7 @@ module squeez #(parameter CWIDTH = 320,
         .cout(coReg),
         .clk(clk),
         .reset(reset|(~Ggo)),
+        .en(Ggo),
         .done(Gdone),
         .rounds(rounds)
     );
