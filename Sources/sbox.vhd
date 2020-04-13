@@ -31,7 +31,7 @@ use IEEE.NUMERIC_STD.ALL;
 --library UNISIM;
 --use UNISIM.VComponents.all;
 
-entity sbox is
+entity sboxV2 is
     Generic( CWIDTH : integer := 128);
     Port ( 
         c : in std_logic_vector(CWIDTH-1 downto 0);
@@ -41,9 +41,9 @@ entity sbox is
         clk : in std_logic;
         doneOut: out std_logic
     );
-end sbox;
+end sboxV2;
 
-architecture Behavioral of sbox is
+architecture Behavioral of sboxV2 is
 component ALU is
     Port(
         a,b: in std_logic_vector(63 downto 0);
@@ -149,28 +149,28 @@ begin
                     mode <= "00";
                     RW <= Write;
                 when LOOP1 =>
-                    sel1 := to_integer(i(integer(ceil(log2(real(CWORDS64)))) - 1 downto 0));
+                    sel1 := to_integer(i(integer(ceil(log2(real(CWORDS64)))) - 1 downto 0) sll 1);
                     sel2 := (CWORDS64 + sel1 - 1) mod CWORDS64;
                     CSel1 <= CReg(64*(sel1+1) - 1 downto 64*sel1);
                     CSel2 <= CReg(64*(sel2+1) - 1 downto 64*sel2);
                     mode <= "00";
                     RW <= Read;
                 when LOOP2 =>
-                    sel1 := to_integer(i2(integer(ceil(log2(real(CWORDS64)))) - 1 downto 1));
+                    sel1 := to_integer(i2(integer(ceil(log2(real(CWORDS64)))) - 1 downto 0));
                     sel2 := (sel1 + 1) mod CWORDS64;
                     CSel1 <= CReg(64*(sel1+1) - 1 downto 64*sel1);
                     CSel2 <= CReg(64*(sel2+1) - 1 downto 64*sel2);
                     mode <= "01";
                     RW <= Read;
                 when LOOP3 =>
-                    sel1 := to_integer(i3(integer(ceil(log2(real(CWORDS64)))) - 1 downto 1));
+                    sel1 := to_integer(i3(integer(ceil(log2(real(CWORDS64)))) - 1 downto 0));
                     sel2 := (sel1 + 1) mod CWORDS64;
                     CSel1 <= CReg(64*(sel1+1) - 1 downto 64*sel1);
                     CSel2 <= TReg(64*(sel2+1) - 1 downto 64*sel2);
                     mode <= "00";
                     RW <= Read;
                 when LOOP4 =>
-                    sel2 := to_integer(i4(integer(ceil(log2(real(CWORDS64)))) - 1 downto 0));
+                    sel2 := to_integer(i4(integer(ceil(log2(real(CWORDS64)))) - 1 downto 0) sll 1);
                     sel1 := (sel2 + 1) mod CWORDS64;
                     CSel1 <= CReg(64*(sel1+1) - 1 downto 64*sel1);
                     CSel2 <= CReg(64*(sel2+1) - 1 downto 64*sel2);
@@ -205,25 +205,25 @@ Counters: process(clk) begin
             i4 <= (others => '0');
         elsif (RW = Read) then
             if (curr_state = LOOP1) then
-                i <= i + 2;
+                i <= i + 1;
                 i2 <= i2;
                 i3 <= i3;
                 i4 <= i4;
             elsif (curr_state = LOOP2) then
                 i <= i;
-                i2 <= i2 + 2;
+                i2 <= i2 + 1;
                 i3 <= i3;
                 i4 <= i4;
             elsif (curr_state = LOOP3) then
                 i <= i;
                 i2 <= i2;
-                i3 <= i3 + 2;
+                i3 <= i3 + 1;
                 i4 <= i4;
             elsif (curr_state = LOOP4) then
                 i <= i;
                 i2 <= i2;
                 i3 <= i3;
-                i4 <= i4 + 2;
+                i4 <= i4 + 1;
             end if;
         end if;
     end if;

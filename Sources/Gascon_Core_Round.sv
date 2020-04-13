@@ -169,7 +169,7 @@ module Gascon_Core_Round #(parameter CWIDTH = 320, parameter ROUND_COUNT = 16)(
 //    end
 
  
-    sbox #(.CWIDTH(CWIDTH)) sBOX (
+    sboxV2 #(.CWIDTH(CWIDTH)) sBOX (
         .c(c_reg_int),
         .cout(c_reg_sbox),
         .reset(reset | ~sbox_en),
