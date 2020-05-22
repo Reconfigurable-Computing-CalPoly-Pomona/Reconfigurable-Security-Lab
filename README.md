@@ -10,10 +10,7 @@ Electrical and Computer Engineering Senior Project at California State Polytechn
 ## Advisors
 
 **- Mohamed El-Hadedy:** Assistant Professor, Electrical and Computer Engineering department, College of Engineering, California State Polytechnic University, Pomona.
-
-**- Mostafa M. Hashim Ellabaan:** Senior Researcher, Novo Nordisk Foundation Center for Biosustainability, Technical University of Denmark.  
-
-
+ 
 **Collaborators:**
 
 **1. Wen-Mei Hwu:**  Director of Center for Cognitive Computing Systems Research and Walter J. Sanders III-AMD Endowed Chair Professor in Elecrical and Computer Engineering at UIUC 
