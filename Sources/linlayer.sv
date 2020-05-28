@@ -169,7 +169,7 @@ module linlayer #(parameter CWORDS64 = 9) (
         .in(w),
         .shift(r0),
         .out(rot1),
-        .reset(reset) 
+        .reset(reset)
     );
     
     BiRotR second (
