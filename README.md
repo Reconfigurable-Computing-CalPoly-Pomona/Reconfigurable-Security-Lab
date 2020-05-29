@@ -25,3 +25,4 @@ Electrical and Computer Engineering Senior Project at California State Polytechn
 ## Project Sponsors
 
 1. **[Xilinx Inc.](https://www.xilinx.com/)**
+2. **[IBM-Illinois Center for Cognitive Computing System Research](https://www.c3sr.com/)**
