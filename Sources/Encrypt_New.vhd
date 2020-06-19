@@ -70,63 +70,27 @@ component ksneq32 is
     );
 end component;
 
-component absF is
+component absFsqueez is
     Generic(CWIDTH : integer := 320; RWIDTH : integer := 32; XWIDTH: integer := 64;
-                BWIDTH : integer := 32; NUMBLOCKS: integer := 4); 
+                BWIDTH : integer := 32; REMAINWIDTH: integer := 20; NUMBLOCKS: integer := 4); 
     Port(
         c : in std_logic_vector(CWIDTH-1 downto 0);
         r : in std_logic_vector(RWIDTH-1 downto 0);
         x : in std_logic_vector(XWIDTH-1 downto 0);
         blocks : in std_logic_vector((BWIDTH*NUMBLOCKS)-1 downto 0);
         rounds : in std_logic_vector(3 downto 0);
+        remaining : in std_logic_vector(REMAINWIDTH - 1 downto 0);
         finalize : in std_logic;
         clk: in std_logic; 
         reset: in std_logic;
         en : in std_logic;
         AoF : in std_logic;
+        Squeez: in std_logic;
         domain : in std_logic_vector(1 downto 0);
         cout : out std_logic_vector(CWIDTH-1 downto 0);
         rout : out std_logic_vector(RWIDTH-1 downto 0);
         xout : out std_logic_vector(XWIDTH-1 downto 0);
         done : out std_logic
-    );
-end component;
-
-component squeez 
-    Generic (CWIDTH : integer := 320; RWIDTH : integer := 32; DATA_SIZE: integer := 32;
-                REMAINWIDTH: integer := 20; ROUND_COUNT :integer := 10);
-    Port(
-            clk : in std_logic;
-            reset: in std_logic;
-            big: in std_logic;
-            en : in std_logic;
-            seldone : out std_logic;
-            Gdone : out  std_logic;
-            c : in std_logic_vector(CWIDTH-1 downto 0); -- capacity
-            Bdata : out std_logic_vector(CWIDTH-1 downto 0); --output data
-            r : in std_logic_vector(RWIDTH-1 downto 0); -- state I think
-            remaining : in std_logic_vector(REMAINWIDTH-1 downto 0);
-            rounds : in std_logic_vector(ROUND_COUNT-1 downto 0);
-            squeezDone : out std_logic
-    );  
-end component;
-
-component F
-    Generic (CWIDTH : integer := 320; XWORDS32: integer := 9; DS_WIDTH: integer := 128;
-                RWIDTH : integer := 32; ROUND_COUNT : integer := 10);
-    Port(
-        clk : in std_logic; 
-        reset : in std_logic;
-        en : in std_logic;
-        c : in std_logic_vector(CWIDTH-1 downto 0);
-        x : in std_logic_vector(XWORDS32*32-1 downto 0);
-        i : in std_logic_vector(127 downto 0);
-        ds : in std_logic_vector (DS_WIDTH-1 downto 0);
-        rounds : in std_logic_vector(ROUND_COUNT-1 downto 0);
-        cout : out std_logic_vector(CWIDTH-1 downto 0);
-        xout : out std_logic_vector(XWORDS32*32-1 downto 0);
-        rout : out std_logic_vector(RWIDTH-1 downto 0);
-        done : out std_logic 
     );
 end component;
 
@@ -212,21 +176,22 @@ constant dsa : STD_LOGIC_VECTOR(1 downto 0) := "10";
 constant dsm : STD_LOGIC_VECTOR(1 downto 0) := "11";
 signal DomSep : STD_LOGIC_VECTOR(1 downto 0);
 signal r, newr, absFr,Fr : STD_LOGIC_VECTOR(rWidth - 1 downto 0);
-signal newx, absFx, Fx, KSx : STD_LOGIC_VECTOR(xWidth32*32-1 downto 0);
-signal newc, absFc, Fc, KSc, SDK : STD_LOGIC_VECTOR(cWidth64*64 -1 downto 0);
+signal newx, absFx, KSx : STD_LOGIC_VECTOR(xWidth32*32-1 downto 0);
+signal newc, absFc, KSc, SDK : STD_LOGIC_VECTOR(cWidth64*64 -1 downto 0);
 signal doneK, doneS1, doneS2, doneA, doneN1, doneN2, doneP, doneF, doneTAG: STD_LOGIC;
-signal doneAbsF, doneSqe: STD_LOGIC;
-signal rstK, rstAF, rstS : STD_LOGIC;
-signal enK, enAF, enS: STD_LOGIC;
+signal doneAbsF: STD_LOGIC;
+signal rstK, rstAF : STD_LOGIC;
+signal enK, enAF: STD_LOGIC;
 -- confusing signals
 signal absFBlocks : STD_LOGIC_VECTOR(127 downto 0);
-signal remainS : STD_LOGIC_VECTOR(19 downto 0);
 signal Fi : STD_LOGIC_VECTOR(127 downto 0);
 signal big: STD_LOGIC := '0';
 signal setTag: STD_LOGIC := '1';
 signal ctemp : std_logic_vector(P'LENGTH - 1 downto 0);
 --end
 signal AorF : STD_LOGIC := '0';
+signal Squez : STD_LOGIC := '0';
+signal remain : STD_LOGIC_VECTOR(19 downto 0);
 signal fin : STD_LOGIC;
 signal tempSel: STD_LOGIC_VECTOR(7 downto 0);
 signal PadIn : STD_LOGIC_VECTOR(127 downto 0);
@@ -237,9 +202,9 @@ signal DSlilm : STD_LOGIC_VECTOR(3 downto 0);
 signal finalize : STD_LOGIC;
 signal tagreg :STD_LOGIC;
 signal doneTemp: STD_LOGIC := '0';
-type stateMachine is (INIT, BeginEnc, StaticData1, StaticData2, NonceStep, Associated, CipherText1, CipherText2, CipherPostFor, Padd, TagFinal);
+type stateMachine is (INIT, BeginEnc, StaticData1, StaticData2, NonceStep, Associated, CipherText1, CipherText2, CipherPostFor, Padd, TagFinal, BUFF);
 type selector is ('0', '1', '2', '3', '4');
-signal State : stateMachine := INIT;
+signal State, nextState : stateMachine := INIT;
 signal SEL : selector;
 begin
 process (clk,rst)
@@ -254,10 +219,8 @@ if (rising_edge(clk)) then
             rounds <= std_logic_vector(to_unsigned(7,rounds'length));
             rstK <= '1';
             rstAF <= '1';
-            rstS <= '1';
             enK <= '0';
             enAF <= '0';
-            enS <= '0';
             setTag <= '0';
             doneS1 <= '0';
             doneS2 <= '0';
@@ -271,7 +234,7 @@ if (rising_edge(clk)) then
                 rounds <= std_logic_vector(to_unsigned(7,rounds'length));
                 rstK <= '1';
                 rstAF <= '1';
-                rstS <= '1';
+                Squez <= '0';
                 tagreg <= TAGIN; 
                 setTag <= '0';
                 doneS1 <= '0';
@@ -302,34 +265,40 @@ if (rising_edge(clk)) then
                     SEL <= '0';
                     Domsep <= dss;
                     if (ints > integer(0)) then
-                        rstAF <= '0';
-                        enAF <= '1';
                         if(doneS1 = '1') then
-                            state <= StaticData2;
+                            rstAF <= '1';
+                            enAF <= '0';
+                            Squez <= '1';
+                            state <= BUFF;
+                            nextState <= StaticData2;
                             SEL <= '3';
+                        else
+                            rstAF <= '0';
+                            enAF <= '1';
                         end if;
                     else
                         state <= NonceStep;
                     end if;
             when StaticData2 =>
-                rstS <= '0';
-                rstAF <= '1';
-                enAF <= '0';
-                enS <= '1';
-                Sel <= '3';
-                RemainS <= conv_std_logic_vector(cWidth64*64,RemainS'Length);
-                big <= '1';
-                doneS2 <= doneSqe;
+                Sel <= '0';
+                remain <= conv_std_logic_vector(cWidth64*64,remain'Length);
+                finalize <= '1';
+                doneS2 <= doneAbsF;
                 if (doneS2 = '1') then
-                    state <= NonceStep;
+                    rstAF <= '1';
+                    enAF <= '0';
+                    state <= BUFF;
+                    nextState <= NonceStep;
                     SEL <= '0';
+                else
+                    rstAF <= '0';
+                    enAF <= '1';
                 end if;
             when NonceStep =>
                 rounds <= std_logic_vector(to_unsigned(11,rounds'length));
                 Domsep <= dsd;
                 Sel <= '0';
-                rstS <= '1';
-                enS <= '0';
+                Squez <= '0';
                 if((inta + intm) = 0) then
                     finalize <= '1';
                 else
@@ -339,7 +308,8 @@ if (rising_edge(clk)) then
                 doneN1 <= doneAbsF;
                 AorF <= '0';
                 if (doneN1 = '1') then
-                    state <= Associated;
+                    state <= BUFF;
+                    nextState <= Associated;
                     absFBlocks <= A;
                     rstAF <= '1';
                     enAF <= '0';
@@ -362,9 +332,11 @@ if (rising_edge(clk)) then
                 AorF <= '0';
                 if (doneN2 = '1') then
                     if (intm > 0) then
-                        state <= CipherText1;--to cipher
+                        state <= BUFF;
+                        nextState <= CipherText1;--to cipher
                     else
-                        state <= TagFinal;--to tag
+                        state <= BUFF;
+                        nextState <= TagFinal;--to tag
                     end if;
                     SEL <= '1';
                     rstAF <= '1';
@@ -383,7 +355,8 @@ if (rising_edge(clk)) then
                     end if;
                     if(doneAbsF = '1') then
 --                        rstAF <= '1';
-                        state <= CipherText2;
+                        state <= BUFF;
+                        nextState <= CipherText2;
                     else
                         rstAF <= '0';
                         enAF <= '1';
@@ -422,23 +395,25 @@ if (rising_edge(clk)) then
                 absFBlocks <= ctemp((i+1)*rWidth-1 downto i*rWidth);
                 end if;
                 if (doneAbsF = '1')then
-                    rstS <= '1';
-                    enS <= '0';
-                    state <= TagFinal;
-                    big <= '0';
+                    rstAF <= '1';
+                    enAF <= '0';
+                    Squez <= '1';
+                    state <= BUFF;
+                    nextState <= TagFinal;
+                    finalize <= '0';
                 end if;
             when TagFinal =>
                 if(setTag = '0') then
-                    rstAF <= '1';
-                    enAF <= '0';
-                    SEL <= '3';
-                    rstS <= '0';
-                    enS <= '1';
-                    doneTag <= doneSqe;
+                    rstAF <= '0';
+                    enAF <= '1';
+                    SEL <= '0';
+                    doneTag <= doneAbsF;
                     if (doneTag = '1')then
                         C <= ctemp;
-                        rstS <= '1';
-                        enS <= '0';
+                        finalize <= '0';
+                        rstAF <= '1';
+                        enAF <= '0';
+                        Squez <= '0';
                         setTag <= '1';
                         doneTemp <= '1'; -- after last action
                         if(eoc ='1')then
@@ -452,14 +427,14 @@ if (rising_edge(clk)) then
                 else
                     rstK <= '1';
                     rstAF <= '1';
-                    rstS <= '1';
                     enK <= '0';
                     enAF <= '0';
-                    enS <= '0';
                     if(rst = '1') then
                         state <= INIT;
                     end if;
                 end if;
+            when BUFF=>
+                state <= nextState;
             when others => finalize <= '0';
         end case;
         end if;
@@ -471,19 +446,9 @@ end process;
 SetXCR: process (SEL,clk) begin
     if (rising_edge(clk)) then
     case SEL is 
-        when '4' =>
-            newc <= Fc;
-            newx <= Fx;
-            newr <= Fr;
-        when '3' =>
-            newc <= SDK;
         when '2' =>
             newc <= KSc;
             newx <= KSx;
-        when '1' =>
-            newc <= Fc;
-            newx <= Fx;
-            newr <= Fr;
         when '0' =>
             newc <= absFc;
             newx <= absFx;
@@ -506,14 +471,14 @@ if (rising_edge(clk)) then
     elsif (doneK = '1') then
         x <= newx;
         statec <= newc;
-    elsif(doneAbsF = '1' or doneF = '1') then
+    elsif(doneAbsF = '1') then
         statec <= newc;
-        x <= newx;
-        r <= newr;
+        if (Squez = '0') then
+            x <= newx;
+            r <= newr;
+        end if;
     elsif (doneTag = '1')then
         TAG <= newc(0);
-    elsif (doneSqe = '1') then
-        statec <= newc;
     end if;
 end if;
 end process dataFF; 
@@ -535,11 +500,12 @@ port map(
     done => doneK
 );
 
-Absor: absF generic map(
+Absor: absFsqueez generic map(
     CWIDTH => cWidth64*64,
     RWIDTH => rWidth,
     XWIDTH => xWidth32*32,
     BWIDTH => 128,
+    REMAINWIDTH => 20,
     NUMBLOCKS => 1
 )
 port map(
@@ -553,33 +519,13 @@ port map(
     en => enAF,
     domain => DomSep,
     AoF => AorF,
+    Squeez => Squez,
     cout => absFc,
     rout => absFr,
     xout => absFx,
     done => doneAbsF,
-    rounds => rounds
-);
-
-Sqeez: squeez generic map(
-    CWIDTH => cWidth64*64,
-    RWIDTH => rWidth,
-    DATA_SIZE => 32,
-    REMAINWIDTH => 20,
-    ROUND_COUNT => 10
-)
-port map(
-    clk => clk,
-    reset => rstS,
-    en => enS,
-    seldone => open,
-    Gdone => open,
-    c => statec, -- capacity
-    Bdata => SDK, --output data
-    r => r, -- state I think
-    remaining => remainS,
-    rounds => "0000000111",
-    squeezDone => doneSqe,
-    big => big
+    rounds => rounds,
+    remaining => remain
 );
 
 pading: padding2 Generic map ( 
